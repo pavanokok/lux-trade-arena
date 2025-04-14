@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { 
   ArrowDown, 
@@ -134,7 +133,6 @@ interface AssetRowProps {
 }
 
 const AssetRow = ({ asset }: AssetRowProps) => {
-  // Create a simplified sparkline with SVG
   const chartHeight = 40;
   const chartWidth = 120;
   const min = Math.min(...asset.chart);
@@ -245,16 +243,18 @@ const MarketOverview = () => {
           </CardHeader>
           <CardContent className="pt-4">
             <div className="overflow-hidden">
-              <TabsContent value="crypto" className="mt-0 space-y-1">
-                {cryptoMarkets.map((asset) => (
-                  <AssetRow key={asset.id} asset={asset} />
-                ))}
-              </TabsContent>
-              <TabsContent value="stocks" className="mt-0 space-y-1">
-                {stockMarkets.map((asset) => (
-                  <AssetRow key={asset.id} asset={asset} />
-                ))}
-              </TabsContent>
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                <TabsContent value="crypto" className="mt-0 space-y-1">
+                  {cryptoMarkets.map((asset) => (
+                    <AssetRow key={asset.id} asset={asset} />
+                  ))}
+                </TabsContent>
+                <TabsContent value="stocks" className="mt-0 space-y-1">
+                  {stockMarkets.map((asset) => (
+                    <AssetRow key={asset.id} asset={asset} />
+                  ))}
+                </TabsContent>
+              </Tabs>
             </div>
             <div className="mt-6 text-center">
               <Button variant="outline" className="gap-2">
