@@ -29,6 +29,12 @@
     --destructive: 0 84% 60%;
     --destructive-foreground: 210 40% 98%;
 
+    --success: 142 76% 36%;
+    --success-foreground: 210 40% 98%;
+
+    --danger: 0 84% 60%;
+    --danger-foreground: 210 40% 98%;
+
     --border: 217 32% 17%;
     --input: 217 32% 17%;
     --ring: 212 100% 47%;
@@ -69,6 +75,12 @@
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 210 40% 98%;
+
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+
+    --danger: 0 84% 60%;
+    --danger-foreground: 0 0% 100%;
 
     --border: 214 32% 91%;
     --input: 214 32% 91%;
@@ -139,5 +151,27 @@
     0% { background-position: 0% 50% }
     50% { background-position: 100% 50% }
     100% { background-position: 0% 50% }
+  }
+
+  /* Trading platform specific styles */
+  .chart-area {
+    @apply rounded-lg overflow-hidden border border-border/40;
+  }
+
+  .asset-pill {
+    @apply px-3 py-1.5 rounded-full text-xs font-medium border border-border/40 hover:bg-secondary/40 transition-colors cursor-pointer;
+  }
+
+  .asset-pill.active {
+    @apply bg-primary text-primary-foreground border-primary;
+  }
+
+  .animate-ticker {
+    animation: ticker 30s linear infinite;
+  }
+
+  @keyframes ticker {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-100%); }
   }
 }
