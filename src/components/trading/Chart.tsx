@@ -34,7 +34,7 @@ const Chart = ({ data, width = '100%', height = 400, darkMode = true, symbol }: 
 
       const newChart = createChart(chartContainerRef.current, {
         width: chartContainerRef.current.clientWidth,
-        height,
+        height: height as number,
         layout: {
           background: { type: ColorType.Solid, color: backgroundColor },
           textColor,
@@ -74,24 +74,19 @@ const Chart = ({ data, width = '100%', height = 400, darkMode = true, symbol }: 
         newChart.remove();
       };
     }
-  }, [darkMode]);
+  }, [darkMode, height]);
 
   // Update data when it changes
   useEffect(() => {
     if (series && data && data.length > 0) {
-      // Convert the data to the format expected by lightweight-charts
-      const formattedData = data.map(item => ({
-        time: item.time as Time,
-        open: item.open,
-        high: item.high,
-        low: item.low,
-        close: item.close,
-        volume: item.volume
-      }));
+      series.setData(data);
       
-      series.setData(formattedData);
+      // Fit content to make sure all data is visible
+      if (chart) {
+        chart.timeScale().fitContent();
+      }
     }
-  }, [series, data]);
+  }, [series, data, chart]);
 
   return (
     <div>

@@ -7,15 +7,19 @@ import Chart from "@/components/trading/Chart";
 import MarketOrder, { OrderDetails } from "@/components/trading/MarketOrder";
 import MarketInfo from "@/components/trading/MarketInfo";
 import OrderBook from "@/components/trading/OrderBook";
-import { fetchCryptoData, fetchCryptoHistoricalData, MarketData, CandleData } from "@/utils/marketData";
-import { Bitcoin, Landmark, RefreshCcw, LoaderCircle } from "lucide-react";
+import { fetchCryptoData, fetchCryptoHistoricalData, searchAssets, MarketData, CandleData } from "@/utils/marketData";
+import { Bitcoin, Search, RefreshCcw, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
 
 const AVAILABLE_ASSETS = [
   { id: "bitcoin", symbol: "BTC", name: "Bitcoin", type: "crypto" },
   { id: "ethereum", symbol: "ETH", name: "Ethereum", type: "crypto" },
   { id: "solana", symbol: "SOL", name: "Solana", type: "crypto" },
   { id: "cardano", symbol: "ADA", name: "Cardano", type: "crypto" },
+  { id: "ripple", symbol: "XRP", name: "XRP", type: "crypto" },
+  { id: "polkadot", symbol: "DOT", name: "Polkadot", type: "crypto" },
 ];
 
 const Trading = () => {
@@ -37,6 +41,11 @@ const Trading = () => {
   const [chartData, setChartData] = useState<CandleData[]>([]);
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<OrderDetails[]>([]);
+  
+  // Search functionality
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
 
   // Update URL when selected asset changes
   useEffect(() => {
@@ -83,6 +92,29 @@ const Trading = () => {
     fetchHistorical();
   }, [selectedAsset, timeframe]);
 
+  // Handle search input
+  useEffect(() => {
+    const handleSearch = async () => {
+      if (searchQuery.length < 2) {
+        setSearchResults([]);
+        return;
+      }
+
+      setSearching(true);
+      try {
+        const results = await searchAssets(searchQuery);
+        setSearchResults(results);
+      } catch (error) {
+        console.error("Search error:", error);
+      } finally {
+        setSearching(false);
+      }
+    };
+
+    const timer = setTimeout(handleSearch, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   // Handle order placement
   const handlePlaceOrder = (order: OrderDetails) => {
     setOrders((prev) => [order, ...prev]);
@@ -120,14 +152,45 @@ const Trading = () => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
         <h1 className="text-3xl font-display font-bold">Trading Dashboard</h1>
         
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handleRefresh}>
-            {loading ? (
-              <LoaderCircle className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <RefreshCcw className="h-4 w-4 mr-2" />
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          <div className="relative w-full md:w-72">
+            <Input
+              placeholder="Search assets..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pr-8"
+            />
+            <Search className="absolute top-2.5 right-2.5 h-4 w-4 text-muted-foreground" />
+            
+            {/* Search results dropdown */}
+            {searchResults.length > 0 && searchQuery.length >= 2 && (
+              <Card className="absolute top-full left-0 right-0 mt-1 p-2 max-h-60 overflow-auto z-50">
+                <ul>
+                  {searchResults.map((result) => (
+                    <li 
+                      key={result.id} 
+                      className="p-2 hover:bg-secondary/20 rounded-md cursor-pointer flex items-center gap-3"
+                      onClick={() => {
+                        setSelectedAsset(result);
+                        setSearchQuery("");
+                        setSearchResults([]);
+                      }}
+                    >
+                      {result.thumb && (
+                        <img src={result.thumb} alt={result.name} className="w-6 h-6 rounded-full" />
+                      )}
+                      <div>
+                        <div className="font-medium">{result.name}</div>
+                        <div className="text-xs text-muted-foreground">{result.symbol}</div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
             )}
-            Refresh
+          </div>
+          <Button variant="outline" size="icon" onClick={handleRefresh} disabled={loading}>
+            {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
           </Button>
         </div>
       </div>

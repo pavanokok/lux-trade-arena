@@ -9,25 +9,18 @@ import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
-const Signup = () => {
+const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [name, setName] = useState("");
   const navigate = useNavigate();
 
-  const handleSignUp = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Basic validation
-    if (!email || !password || !confirmPassword || !name) {
+    if (!email || !password) {
       toast.error("Please fill in all fields");
-      return;
-    }
-    
-    if (password !== confirmPassword) {
-      toast.error("Passwords do not match");
       return;
     }
     
@@ -35,15 +28,9 @@ const Signup = () => {
     setIsLoading(true);
     
     try {
-      // Sign up with Supabase
-      const { data, error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
-        options: {
-          data: {
-            name,
-          },
-        },
       });
       
       if (error) {
@@ -51,27 +38,14 @@ const Signup = () => {
       }
       
       // Show success toast
-      toast.success(
-        "Account created successfully",
-        {
-          description: "Please check your email for verification."
-        }
-      );
+      toast.success("Successfully logged in");
       
-      // Reset form
-      setEmail("");
-      setPassword("");
-      setConfirmPassword("");
-      setName("");
-      
-      // Navigate to dashboard if email verification is not required
-      if (data.session) {
-        navigate("/portfolio");
-      }
+      // Navigate to dashboard
+      navigate("/portfolio");
       
     } catch (error: any) {
-      console.error("Signup error:", error);
-      toast.error(error.message || "An error occurred during signup");
+      console.error("Login error:", error);
+      toast.error(error.message || "An error occurred during login");
     } finally {
       setIsLoading(false);
     }
@@ -80,33 +54,21 @@ const Signup = () => {
   return (
     <div className="container px-4 mx-auto py-10 md:py-20 flex flex-col items-center">
       <div className="w-full max-w-md">
-        <h1 className="text-4xl font-display font-bold mb-2 text-center">Create Your Account</h1>
+        <h1 className="text-4xl font-display font-bold mb-2 text-center">Welcome Back</h1>
         <p className="text-muted-foreground mb-8 text-center">
-          Join the premium mock trading platform today and start building your portfolio
+          Log in to your account to continue trading
         </p>
         
         <Card className="border-border/40 bg-secondary/10 backdrop-blur-sm">
           <CardHeader>
-            <CardTitle>Sign Up</CardTitle>
+            <CardTitle>Log In</CardTitle>
             <CardDescription>
-              Enter your information below to create your account
+              Enter your credentials to access your account
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSignUp}>
+            <form onSubmit={handleLogin}>
               <div className="grid gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="name">Full Name</Label>
-                  <Input 
-                    id="name" 
-                    type="text" 
-                    placeholder="John Doe"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    disabled={isLoading}
-                  />
-                </div>
-                
                 <div className="grid gap-2">
                   <Label htmlFor="email">Email</Label>
                   <Input
@@ -120,7 +82,12 @@ const Signup = () => {
                 </div>
                 
                 <div className="grid gap-2">
-                  <Label htmlFor="password">Password</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="password">Password</Label>
+                    <Link to="#" className="text-sm text-primary hover:underline">
+                      Forgot password?
+                    </Link>
+                  </div>
                   <Input
                     id="password"
                     type="password"
@@ -131,39 +98,24 @@ const Signup = () => {
                   />
                 </div>
                 
-                <div className="grid gap-2">
-                  <Label htmlFor="confirm-password">Confirm Password</Label>
-                  <Input
-                    id="confirm-password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    disabled={isLoading}
-                  />
-                </div>
-                
                 <Button type="submit" className="w-full" disabled={isLoading}>
                   {isLoading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Creating Account...
+                      Logging in...
                     </>
                   ) : (
-                    "Create Account"
+                    "Log In"
                   )}
                 </Button>
               </div>
             </form>
           </CardContent>
-          <CardFooter className="flex flex-col items-center gap-2">
-            <div className="text-sm text-muted-foreground">
-              By signing up, you agree to our Terms of Service and Privacy Policy
-            </div>
+          <CardFooter className="flex justify-center">
             <div className="text-sm">
-              Already have an account?{" "}
-              <Link to="/login" className="text-primary hover:underline">
-                Log In
+              Don't have an account?{" "}
+              <Link to="/signup" className="text-primary hover:underline">
+                Sign Up
               </Link>
             </div>
           </CardFooter>
@@ -173,4 +125,4 @@ const Signup = () => {
   );
 };
 
-export default Signup;
+export default Login;

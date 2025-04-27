@@ -15,7 +15,7 @@ export interface MarketData {
 }
 
 export interface CandleData {
-  time: Time;  // Changed from number to Time type
+  time: Time;
   open: number;
   high: number;
   low: number;
@@ -54,20 +54,19 @@ export async function fetchCryptoHistoricalData(
 ): Promise<CandleData[]> {
   try {
     const response = await axios.get(
-      `https://api.coingecko.com/api/v3/coins/${coinId}/market_chart?vs_currency=usd&days=${days}&interval=hourly`
+      `https://api.coingecko.com/api/v3/coins/${coinId}/ohlc?vs_currency=usd&days=${days}`
     );
 
-    // Convert prices array [timestamp, price] to candlestick format
-    // Note: CoinGecko free API doesn't provide OHLC directly for all timeframes
-    // This is a simplified version where we set open=close=price for visualization
-    return response.data.prices.map((item: [number, number]) => {
-      const [timestamp, price] = item;
+    // CoinGecko OHLC endpoint returns data in format:
+    // [timestamp, open, high, low, close]
+    return response.data.map((item: number[]) => {
+      const [timestamp, open, high, low, close] = item;
       return {
-        time: timestamp / 1000 as Time, // Convert to seconds and cast as Time for lightweight-charts
-        open: price,
-        high: price * 1.001, // Simulate a small range for visualization
-        low: price * 0.999,  // Simulate a small range for visualization
-        close: price,
+        time: timestamp / 1000 as Time, // Convert to seconds for lightweight-charts
+        open,
+        high,
+        low,
+        close
       };
     });
   } catch (error) {
@@ -103,4 +102,27 @@ export function formatPrice(price: number): string {
 // Format percentage change
 export function formatPercentage(value: number): string {
   return `${value > 0 ? '+' : ''}${value.toFixed(2)}%`;
+}
+
+// Search for assets (both crypto and stocks)
+export async function searchAssets(query: string): Promise<any[]> {
+  if (!query || query.trim().length < 2) return [];
+  
+  try {
+    // Search for cryptocurrencies
+    const response = await axios.get(
+      `https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(query)}`
+    );
+    
+    return response.data.coins.slice(0, 10).map((coin: any) => ({
+      id: coin.id,
+      symbol: coin.symbol.toUpperCase(),
+      name: coin.name,
+      type: "crypto",
+      thumb: coin.thumb
+    }));
+  } catch (error) {
+    console.error("Error searching assets:", error);
+    return [];
+  }
 }
