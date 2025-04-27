@@ -1,7 +1,7 @@
 
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Bell, Menu, Search, User } from "lucide-react";
+import { Bell, Menu, Search, User as UserIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { 
   DropdownMenu,
@@ -11,9 +11,23 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { User } from "@supabase/supabase-js";
+import { supabase } from "@/integrations/supabase/client";
 
-const Navbar = () => {
+interface NavbarProps {
+  user: User | null;
+}
+
+const Navbar = ({ user }: NavbarProps) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  };
 
   return (
     <nav className="py-4 px-6 md:px-8 border-b border-border/40 backdrop-blur-sm fixed top-0 left-0 right-0 z-50">
@@ -57,16 +71,7 @@ const Navbar = () => {
               <DropdownMenuSeparator />
               <div className="max-h-80 overflow-auto">
                 <DropdownMenuItem className="flex flex-col items-start py-3">
-                  <span className="text-sm font-medium">Bitcoin is up 5% today</span>
-                  <span className="text-xs text-muted-foreground">15 minutes ago</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem className="flex flex-col items-start py-3">
-                  <span className="text-sm font-medium">Your limit order for ETH was filled</span>
-                  <span className="text-xs text-muted-foreground">1 hour ago</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem className="flex flex-col items-start py-3">
-                  <span className="text-sm font-medium">Market alert: NASDAQ is down 2.5%</span>
-                  <span className="text-xs text-muted-foreground">3 hours ago</span>
+                  <span className="text-sm font-medium">No new notifications</span>
                 </DropdownMenuItem>
               </div>
             </DropdownMenuContent>
@@ -75,18 +80,37 @@ const Navbar = () => {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="rounded-full px-4 gap-2 border-border/40">
-                <User className="h-4 w-4" />
-                <span>Account</span>
+                <UserIcon className="h-4 w-4" />
+                <span>{user ? 'Account' : 'Sign In'}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuLabel>My Account</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>Profile</DropdownMenuItem>
-              <DropdownMenuItem>Settings</DropdownMenuItem>
-              <DropdownMenuItem>Portfolio</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>Log out</DropdownMenuItem>
+              {user ? (
+                <>
+                  <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link to="/settings">Profile</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/settings">Settings</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/portfolio">Portfolio</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={handleLogout}>Log out</DropdownMenuItem>
+                </>
+              ) : (
+                <>
+                  <DropdownMenuItem asChild>
+                    <Link to="/login">Sign In</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/signup">Sign Up</Link>
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -115,12 +139,20 @@ const Navbar = () => {
               News
             </Link>
             <div className="flex justify-between">
-              <Button variant="outline" size="sm" className="w-1/2 mr-2">
-                Sign In
-              </Button>
-              <Button size="sm" className="w-1/2 ml-2">
-                Sign Up
-              </Button>
+              {user ? (
+                <Button variant="outline" size="sm" className="w-full" onClick={handleLogout}>
+                  Log out
+                </Button>
+              ) : (
+                <>
+                  <Button variant="outline" size="sm" className="w-1/2 mr-2" asChild>
+                    <Link to="/login">Sign In</Link>
+                  </Button>
+                  <Button size="sm" className="w-1/2 ml-2" asChild>
+                    <Link to="/signup">Sign Up</Link>
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         )}
