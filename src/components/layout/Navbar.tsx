@@ -1,6 +1,6 @@
 
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { Bell, Menu, Search, User as UserIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { 
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 interface NavbarProps {
   user: User | null;
@@ -20,14 +21,31 @@ interface NavbarProps {
 
 const Navbar = ({ user }: NavbarProps) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const navigate = useNavigate();
 
   const handleLogout = async () => {
     try {
       await supabase.auth.signOut();
+      toast.success("Successfully logged out");
+      navigate("/");
     } catch (error) {
       console.error("Error signing out:", error);
+      toast.error("Error signing out");
     }
   };
+
+  // Close mobile menu when route changes
+  useEffect(() => {
+    const handleRouteChange = () => {
+      setIsMenuOpen(false);
+    };
+    
+    window.addEventListener("popstate", handleRouteChange);
+    
+    return () => {
+      window.removeEventListener("popstate", handleRouteChange);
+    };
+  }, []);
 
   return (
     <nav className="py-4 px-6 md:px-8 border-b border-border/40 backdrop-blur-sm fixed top-0 left-0 right-0 z-50">
@@ -59,23 +77,24 @@ const Navbar = ({ user }: NavbarProps) => {
             <Search className="h-5 w-5 text-muted-foreground" />
           </Button>
           
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="rounded-full relative">
-                <Bell className="h-5 w-5 text-muted-foreground" />
-                <span className="absolute top-1 right-1.5 h-2 w-2 rounded-full bg-accent"></span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-80">
-              <DropdownMenuLabel>Notifications</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <div className="max-h-80 overflow-auto">
-                <DropdownMenuItem className="flex flex-col items-start py-3">
-                  <span className="text-sm font-medium">No new notifications</span>
-                </DropdownMenuItem>
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {user && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="rounded-full">
+                  <Bell className="h-5 w-5 text-muted-foreground" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80">
+                <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <div className="max-h-80 overflow-auto">
+                  <DropdownMenuItem className="flex flex-col items-start py-3">
+                    <span className="text-sm font-medium">No new notifications</span>
+                  </DropdownMenuItem>
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

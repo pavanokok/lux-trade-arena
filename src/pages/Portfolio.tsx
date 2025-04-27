@@ -1,10 +1,12 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowUp, ArrowDown, RefreshCcw } from "lucide-react";
-import { formatPrice, formatPercentage } from "@/utils/marketData";
+import { ArrowUp, ArrowDown, RefreshCcw, Loader2 } from "lucide-react";
+import { formatPrice, formatPercentage, fetchCryptoData } from "@/utils/marketData";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "react-router-dom";
+import { OrderDetails } from "@/components/trading/MarketOrder";
 
 interface PortfolioAsset {
   id: string;
@@ -18,86 +20,193 @@ interface PortfolioAsset {
   pnlPercent: number;
 }
 
+interface UserTrade {
+  id: string;
+  user_id: string;
+  symbol: string;
+  quantity: number;
+  price: number;
+  total: number;
+  type: 'buy' | 'sell';
+  created_at: string;
+}
+
 const Portfolio = () => {
   const [assets, setAssets] = useState<PortfolioAsset[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalValue, setTotalValue] = useState(0);
   const [totalPnl, setTotalPnl] = useState(0);
   const [totalPnlPercent, setTotalPnlPercent] = useState(0);
+  const [recentTrades, setRecentTrades] = useState<UserTrade[]>([]);
+  const navigate = useNavigate();
   
-  // Mock portfolio data - in a real app, this would come from a database
   useEffect(() => {
-    const mockPortfolio = [
-      {
-        id: "bitcoin",
-        symbol: "BTC",
-        name: "Bitcoin",
-        quantity: 0.25,
-        avgBuyPrice: 54000,
-        currentPrice: 56842.12,
-        totalValue: 0,
-        pnl: 0,
-        pnlPercent: 0
-      },
-      {
-        id: "ethereum",
-        symbol: "ETH",
-        name: "Ethereum",
-        quantity: 2.5,
-        avgBuyPrice: 3100,
-        currentPrice: 3245.67,
-        totalValue: 0,
-        pnl: 0,
-        pnlPercent: 0
-      },
-      {
-        id: "solana",
-        symbol: "SOL",
-        name: "Solana",
-        quantity: 15,
-        avgBuyPrice: 118,
-        currentPrice: 123.45,
-        totalValue: 0,
-        pnl: 0,
-        pnlPercent: 0
+    const checkUser = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) {
+        toast.error("Please log in to view your portfolio");
+        navigate("/login");
       }
-    ];
+    };
     
-    // Calculate derived values
-    const updatedAssets = mockPortfolio.map(asset => {
-      const totalValue = asset.quantity * asset.currentPrice;
-      const totalCost = asset.quantity * asset.avgBuyPrice;
-      const pnl = totalValue - totalCost;
-      const pnlPercent = (pnl / totalCost) * 100;
+    checkUser();
+  }, [navigate]);
+  
+  useEffect(() => {
+    const fetchUserTrades = async () => {
+      setLoading(true);
       
-      return {
-        ...asset,
-        totalValue,
-        pnl,
-        pnlPercent
-      };
-    });
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionData.session) return;
+        
+        const { data: userTrades, error } = await supabase
+          .from('trades')
+          .select('*')
+          .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        if (userTrades && userTrades.length > 0) {
+          setRecentTrades(userTrades);
+          
+          const portfolioMap = new Map<string, { 
+            id: string, 
+            symbol: string,
+            name: string,
+            quantity: number, 
+            totalCost: number 
+          }>();
+          
+          userTrades.forEach((trade: UserTrade) => {
+            const symbol = trade.symbol;
+            
+            if (!portfolioMap.has(symbol)) {
+              portfolioMap.set(symbol, {
+                id: symbol.toLowerCase(),
+                symbol,
+                name: symbol,
+                quantity: 0,
+                totalCost: 0
+              });
+            }
+            
+            const position = portfolioMap.get(symbol)!;
+            
+            if (trade.type === 'buy') {
+              position.quantity += trade.quantity;
+              position.totalCost += trade.total;
+            } else {
+              position.quantity -= trade.quantity;
+              position.totalCost -= (position.totalCost / (position.quantity + trade.quantity)) * trade.quantity;
+            }
+          });
+          
+          const positions = Array.from(portfolioMap.values()).filter(p => p.quantity > 0);
+          
+          const updatedAssets = await Promise.all(positions.map(async (position) => {
+            try {
+              const marketData = await fetchCryptoData(position.id);
+              const currentPrice = marketData?.price || 0;
+              const totalValue = position.quantity * currentPrice;
+              const avgBuyPrice = position.quantity > 0 ? position.totalCost / position.quantity : 0;
+              const pnl = totalValue - position.totalCost;
+              const pnlPercent = position.totalCost > 0 ? (pnl / position.totalCost) * 100 : 0;
+              
+              return {
+                id: position.id,
+                symbol: position.symbol,
+                name: position.name,
+                quantity: position.quantity,
+                avgBuyPrice,
+                currentPrice,
+                totalValue,
+                pnl,
+                pnlPercent
+              };
+            } catch (error) {
+              console.error(`Error fetching price for ${position.symbol}:`, error);
+              return {
+                id: position.id,
+                symbol: position.symbol,
+                name: position.symbol,
+                quantity: position.quantity,
+                avgBuyPrice: position.quantity > 0 ? position.totalCost / position.quantity : 0,
+                currentPrice: 0,
+                totalValue: 0,
+                pnl: 0,
+                pnlPercent: 0
+              };
+            }
+          }));
+          
+          const totalVal = updatedAssets.reduce((sum, asset) => sum + asset.totalValue, 0);
+          const totalCost = updatedAssets.reduce((sum, asset) => sum + (asset.avgBuyPrice * asset.quantity), 0);
+          const totalPnlVal = totalVal - totalCost;
+          const totalPnlPercentVal = totalCost > 0 ? (totalPnlVal / totalCost) * 100 : 0;
+          
+          setAssets(updatedAssets);
+          setTotalValue(totalVal);
+          setTotalPnl(totalPnlVal);
+          setTotalPnlPercent(totalPnlPercentVal);
+        } else {
+          setAssets([]);
+          setTotalValue(0);
+          setTotalPnl(0);
+          setTotalPnlPercent(0);
+        }
+      } catch (error: any) {
+        console.error("Error fetching portfolio data:", error);
+        toast.error("Failed to load portfolio data");
+      } finally {
+        setLoading(false);
+      }
+    };
     
-    // Calculate totals
-    const totalVal = updatedAssets.reduce((sum, asset) => sum + asset.totalValue, 0);
-    const totalCost = updatedAssets.reduce((sum, asset) => sum + (asset.quantity * asset.avgBuyPrice), 0);
-    const totalPnlVal = totalVal - totalCost;
-    const totalPnlPercentVal = (totalPnlVal / totalCost) * 100;
-    
-    setAssets(updatedAssets);
-    setTotalValue(totalVal);
-    setTotalPnl(totalPnlVal);
-    setTotalPnlPercent(totalPnlPercentVal);
-    setLoading(false);
+    fetchUserTrades();
   }, []);
   
   const handleRefresh = () => {
     setLoading(true);
-    // In a real app, this would fetch fresh price data
-    setTimeout(() => {
-      setLoading(false);
-      toast("Portfolio refreshed with latest prices");
-    }, 1000);
+    
+    const fetchData = async () => {
+      try {
+        const updatedAssets = await Promise.all(assets.map(async (asset) => {
+          const marketData = await fetchCryptoData(asset.id);
+          const currentPrice = marketData?.price || 0;
+          const totalValue = asset.quantity * currentPrice;
+          const pnl = totalValue - (asset.avgBuyPrice * asset.quantity);
+          const pnlPercent = (asset.avgBuyPrice > 0) ? (pnl / (asset.avgBuyPrice * asset.quantity)) * 100 : 0;
+          
+          return {
+            ...asset,
+            currentPrice,
+            totalValue,
+            pnl,
+            pnlPercent
+          };
+        }));
+        
+        const totalVal = updatedAssets.reduce((sum, asset) => sum + asset.totalValue, 0);
+        const totalCost = updatedAssets.reduce((sum, asset) => sum + (asset.avgBuyPrice * asset.quantity), 0);
+        const totalPnlVal = totalVal - totalCost;
+        const totalPnlPercentVal = totalCost > 0 ? (totalPnlVal / totalCost) * 100 : 0;
+        
+        setAssets(updatedAssets);
+        setTotalValue(totalVal);
+        setTotalPnl(totalPnlVal);
+        setTotalPnlPercent(totalPnlPercentVal);
+        
+        toast.success("Portfolio refreshed with latest prices");
+      } catch (error) {
+        console.error("Error refreshing prices:", error);
+        toast.error("Failed to refresh portfolio data");
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchData();
   };
 
   return (
@@ -106,11 +215,15 @@ const Portfolio = () => {
         <div>
           <h1 className="text-3xl font-display font-bold">Portfolio</h1>
           <p className="text-muted-foreground mt-1">
-            Track your mock trading performance
+            Track your trading performance
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={handleRefresh}>
-          <RefreshCcw className="h-4 w-4 mr-2" />
+        <Button variant="outline" size="sm" onClick={handleRefresh} disabled={loading}>
+          {loading ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <RefreshCcw className="h-4 w-4 mr-2" />
+          )}
           Refresh Prices
         </Button>
       </div>
@@ -152,7 +265,7 @@ const Portfolio = () => {
         </Card>
       </div>
       
-      <Card className="border-border/40 bg-secondary/10 backdrop-blur-sm">
+      <Card className="border-border/40 bg-secondary/10 backdrop-blur-sm mb-8">
         <CardHeader>
           <CardTitle>Holdings</CardTitle>
           <CardDescription>Your current asset positions</CardDescription>
@@ -169,6 +282,13 @@ const Portfolio = () => {
                   <div className="h-8 bg-secondary/40 rounded animate-pulse"></div>
                 </div>
               ))}
+            </div>
+          ) : assets.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-muted-foreground">You don't have any assets yet</p>
+              <Button variant="outline" className="mt-4" onClick={() => navigate('/trading')}>
+                Start Trading
+              </Button>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -229,6 +349,53 @@ const Portfolio = () => {
           )}
         </CardContent>
       </Card>
+
+      {recentTrades.length > 0 && (
+        <Card className="border-border/40 bg-secondary/10 backdrop-blur-sm">
+          <CardHeader>
+            <CardTitle>Recent Trades</CardTitle>
+            <CardDescription>Your recent trading activity</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border/40">
+                    <th className="text-left py-3 font-medium">Type</th>
+                    <th className="text-left py-3 font-medium">Symbol</th>
+                    <th className="text-right py-3 font-medium">Price</th>
+                    <th className="text-right py-3 font-medium">Amount</th>
+                    <th className="text-right py-3 font-medium">Total</th>
+                    <th className="text-right py-3 font-medium">Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentTrades.map((trade) => (
+                    <tr key={trade.id} className="border-b border-border/20 hover:bg-secondary/5">
+                      <td className={`py-2 ${trade.type === 'buy' ? 'text-success' : 'text-destructive'}`}>
+                        {trade.type === 'buy' ? 'Buy' : 'Sell'}
+                      </td>
+                      <td className="py-2">{trade.symbol}</td>
+                      <td className="py-2 text-right font-mono">
+                        ${trade.price.toFixed(2)}
+                      </td>
+                      <td className="py-2 text-right font-mono">
+                        {trade.quantity.toFixed(4)}
+                      </td>
+                      <td className="py-2 text-right font-mono">
+                        ${trade.total.toFixed(2)}
+                      </td>
+                      <td className="py-2 text-right">
+                        {new Date(trade.created_at).toLocaleDateString()} {new Date(trade.created_at).toLocaleTimeString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };

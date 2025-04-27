@@ -6,8 +6,9 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, Mail, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const Signup = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -15,6 +16,7 @@ const Signup = () => {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
+  const [emailSent, setEmailSent] = useState(false);
   const navigate = useNavigate();
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -28,6 +30,11 @@ const Signup = () => {
     
     if (password !== confirmPassword) {
       toast.error("Passwords do not match");
+      return;
+    }
+
+    if (password.length < 6) {
+      toast.error("Password must be at least 6 characters");
       return;
     }
     
@@ -50,19 +57,13 @@ const Signup = () => {
         throw error;
       }
       
-      // Show success toast
-      toast.success(
-        "Account created successfully",
-        {
-          description: "Please check your email for verification."
-        }
-      );
+      // Show success toast and display email sent message
+      toast.success("Account created successfully");
+      setEmailSent(true);
       
       // Reset form
-      setEmail("");
       setPassword("");
       setConfirmPassword("");
-      setName("");
       
       // Navigate to dashboard if email verification is not required
       if (data.session) {
@@ -82,8 +83,17 @@ const Signup = () => {
       <div className="w-full max-w-md">
         <h1 className="text-4xl font-display font-bold mb-2 text-center">Create Your Account</h1>
         <p className="text-muted-foreground mb-8 text-center">
-          Join the premium mock trading platform today and start building your portfolio
+          Join the premium trading platform today and start building your portfolio
         </p>
+        
+        {emailSent && (
+          <Alert className="mb-6 border-primary/50 bg-primary/10">
+            <Mail className="h-4 w-4 text-primary" />
+            <AlertDescription className="text-sm">
+              Verification email sent! Please check your inbox and spam folder to complete your registration.
+            </AlertDescription>
+          </Alert>
+        )}
         
         <Card className="border-border/40 bg-secondary/10 backdrop-blur-sm">
           <CardHeader>
@@ -103,7 +113,7 @@ const Signup = () => {
                     placeholder="John Doe"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    disabled={isLoading}
+                    disabled={isLoading || emailSent}
                   />
                 </div>
                 
@@ -115,7 +125,7 @@ const Signup = () => {
                     placeholder="name@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    disabled={isLoading}
+                    disabled={isLoading || emailSent}
                   />
                 </div>
                 
@@ -127,7 +137,7 @@ const Signup = () => {
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    disabled={isLoading}
+                    disabled={isLoading || emailSent}
                   />
                 </div>
                 
@@ -139,20 +149,31 @@ const Signup = () => {
                     placeholder="••••••••"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    disabled={isLoading}
+                    disabled={isLoading || emailSent}
                   />
                 </div>
                 
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Creating Account...
-                    </>
-                  ) : (
-                    "Create Account"
-                  )}
-                </Button>
+                {!emailSent ? (
+                  <Button type="submit" className="w-full" disabled={isLoading}>
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Creating Account...
+                      </>
+                    ) : (
+                      "Create Account"
+                    )}
+                  </Button>
+                ) : (
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={() => navigate("/login")}
+                  >
+                    Continue to Login
+                  </Button>
+                )}
               </div>
             </form>
           </CardContent>

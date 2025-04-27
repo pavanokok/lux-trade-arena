@@ -1,13 +1,15 @@
 
 import { useState } from 'react';
-import { ArrowDown, ArrowUp } from 'lucide-react';
+import { ArrowDown, ArrowUp, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { toast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { formatPrice } from '@/utils/marketData';
+import { supabase } from '@/integrations/supabase/client';
+import { useNavigate } from 'react-router-dom';
 
 interface MarketOrderProps {
   symbol: string;
@@ -30,6 +32,8 @@ const MarketOrder = ({ symbol, currentPrice, onPlaceOrder }: MarketOrderProps) =
   const [quantity, setQuantity] = useState<string>('');
   const [limitPrice, setLimitPrice] = useState<string>(currentPrice.toString());
   const [orderMethod, setOrderMethod] = useState<'market' | 'limit'>('market');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const navigate = useNavigate();
   
   // Calculate order total
   const orderPrice = orderMethod === 'market' ? currentPrice : Number(limitPrice);
@@ -49,50 +53,78 @@ const MarketOrder = ({ symbol, currentPrice, onPlaceOrder }: MarketOrderProps) =
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Check if user is logged in
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData.session) {
+      toast.error("Please log in to place orders");
+      navigate("/login");
+      return;
+    }
+    
     if (!quantity || Number(quantity) <= 0) {
-      toast({
-        title: "Invalid quantity",
-        description: "Please enter a valid quantity",
-        variant: "destructive",
-      });
+      toast.error("Please enter a valid quantity");
       return;
     }
 
     if (orderMethod === 'limit' && (!limitPrice || Number(limitPrice) <= 0)) {
-      toast({
-        title: "Invalid price",
-        description: "Please enter a valid limit price",
-        variant: "destructive",
-      });
+      toast.error("Please enter a valid limit price");
       return;
     }
 
-    const order: OrderDetails = {
-      type: orderType,
-      orderType: orderMethod,
-      symbol,
-      quantity: Number(quantity),
-      price: orderPrice,
-      total: orderTotal,
-      timestamp: new Date(),
-    };
+    setIsSubmitting(true);
 
-    if (onPlaceOrder) {
-      onPlaceOrder(order);
+    try {
+      const order: OrderDetails = {
+        type: orderType,
+        orderType: orderMethod,
+        symbol,
+        quantity: Number(quantity),
+        price: orderPrice,
+        total: orderTotal,
+        timestamp: new Date(),
+      };
+
+      // Save trade to database
+      const { data: trade, error } = await supabase
+        .from('trades')
+        .insert([{
+          user_id: sessionData.session.user.id,
+          symbol: order.symbol,
+          quantity: order.quantity,
+          price: order.price,
+          total: order.total,
+          type: order.type,
+          order_type: order.orderType,
+        }])
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      // Call onPlaceOrder callback if provided
+      if (onPlaceOrder) {
+        onPlaceOrder(order);
+      }
+
+      // Show toast notification
+      toast.success(
+        `${orderType === 'buy' ? 'Bought' : 'Sold'} ${quantity} ${symbol}`,
+        {
+          description: `${formatPrice(orderPrice)} per unit · Total: ${formatPrice(orderTotal)}`
+        }
+      );
+
+      // Reset form
+      setQuantity('');
+    } catch (error: any) {
+      console.error('Error placing order:', error);
+      toast.error(`Failed to place order: ${error.message}`);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    // Show toast notification
-    toast({
-      title: `${orderType === 'buy' ? 'Buy' : 'Sell'} Order Placed`,
-      description: `${orderType === 'buy' ? 'Bought' : 'Sold'} ${quantity} ${symbol} at ${formatPrice(orderPrice)}`,
-      variant: "default",
-    });
-
-    // Reset form
-    setQuantity('');
   };
 
   return (
@@ -163,8 +195,16 @@ const MarketOrder = ({ symbol, currentPrice, onPlaceOrder }: MarketOrderProps) =
               <Button 
                 type="submit" 
                 className="w-full bg-success hover:bg-success/90 text-success-foreground"
+                disabled={isSubmitting}
               >
-                Buy {symbol}
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  `Buy ${symbol}`
+                )}
               </Button>
             </div>
           </form>
@@ -224,8 +264,16 @@ const MarketOrder = ({ symbol, currentPrice, onPlaceOrder }: MarketOrderProps) =
               <Button 
                 type="submit" 
                 className="w-full bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                disabled={isSubmitting}
               >
-                Sell {symbol}
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  `Sell ${symbol}`
+                )}
               </Button>
             </div>
           </form>

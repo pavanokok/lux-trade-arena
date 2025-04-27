@@ -6,13 +6,15 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, Mail, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showEmailTip, setShowEmailTip] = useState(false);
   const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -34,6 +36,10 @@ const Login = () => {
       });
       
       if (error) {
+        if (error.message.includes("Email not confirmed")) {
+          setShowEmailTip(true);
+          throw new Error("Please check your email to confirm your account before logging in");
+        }
         throw error;
       }
       
@@ -51,6 +57,30 @@ const Login = () => {
     }
   };
 
+  const handleResetPassword = async () => {
+    if (!email) {
+      toast.error("Please enter your email address");
+      return;
+    }
+
+    setIsLoading(true);
+    
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      
+      if (error) throw error;
+      
+      toast.success("Password reset link sent to your email");
+    } catch (error: any) {
+      console.error("Reset password error:", error);
+      toast.error(error.message || "Failed to send reset password email");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="container px-4 mx-auto py-10 md:py-20 flex flex-col items-center">
       <div className="w-full max-w-md">
@@ -58,6 +88,22 @@ const Login = () => {
         <p className="text-muted-foreground mb-8 text-center">
           Log in to your account to continue trading
         </p>
+        
+        {showEmailTip && (
+          <Alert className="mb-6 border-yellow-500/50 bg-yellow-500/10">
+            <AlertCircle className="h-4 w-4 text-yellow-500" />
+            <AlertDescription className="text-sm">
+              Please check your email inbox and spam folder for the verification email.
+              <Button 
+                variant="link" 
+                className="p-0 h-auto ml-1 text-yellow-600" 
+                onClick={() => setShowEmailTip(false)}
+              >
+                Dismiss
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
         
         <Card className="border-border/40 bg-secondary/10 backdrop-blur-sm">
           <CardHeader>
@@ -84,9 +130,15 @@ const Login = () => {
                 <div className="grid gap-2">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="password">Password</Label>
-                    <Link to="#" className="text-sm text-primary hover:underline">
+                    <Button 
+                      type="button" 
+                      variant="link" 
+                      className="p-0 h-auto" 
+                      onClick={handleResetPassword}
+                      disabled={isLoading}
+                    >
                       Forgot password?
-                    </Link>
+                    </Button>
                   </div>
                   <Input
                     id="password"
@@ -111,8 +163,8 @@ const Login = () => {
               </div>
             </form>
           </CardContent>
-          <CardFooter className="flex justify-center">
-            <div className="text-sm">
+          <CardFooter className="flex flex-col gap-4">
+            <div className="text-sm text-center">
               Don't have an account?{" "}
               <Link to="/signup" className="text-primary hover:underline">
                 Sign Up
