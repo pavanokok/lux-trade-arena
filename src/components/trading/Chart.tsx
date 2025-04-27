@@ -1,11 +1,11 @@
 
 import { useRef, useEffect, useState } from 'react';
-import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeriesOptions } from 'lightweight-charts';
+import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeriesOptions, Time } from 'lightweight-charts';
 import { CandleData } from '@/utils/marketData';
 
 interface ChartProps {
   data: CandleData[];
-  width?: number;
+  width?: number | string;
   height?: number;
   darkMode?: boolean;
   symbol: string;
@@ -79,7 +79,17 @@ const Chart = ({ data, width = '100%', height = 400, darkMode = true, symbol }: 
   // Update data when it changes
   useEffect(() => {
     if (series && data && data.length > 0) {
-      series.setData(data);
+      // Convert the data to the format expected by lightweight-charts
+      const formattedData = data.map(item => ({
+        time: item.time as Time,
+        open: item.open,
+        high: item.high,
+        low: item.low,
+        close: item.close,
+        volume: item.volume
+      }));
+      
+      series.setData(formattedData);
     }
   }, [series, data]);
 
