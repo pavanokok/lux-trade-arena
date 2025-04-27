@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { ArrowDown, ArrowUp, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -10,11 +9,12 @@ import { toast } from 'sonner';
 import { formatPrice } from '@/utils/marketData';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
+import type { Trade } from '@/types/trade';
 
 interface MarketOrderProps {
   symbol: string;
   currentPrice: number;
-  onPlaceOrder?: (order: OrderDetails) => void;
+  onPlaceOrder?: (order: Trade) => void;
 }
 
 export interface OrderDetails {
@@ -35,7 +35,6 @@ const MarketOrder = ({ symbol, currentPrice, onPlaceOrder }: MarketOrderProps) =
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
   
-  // Calculate order total
   const orderPrice = orderMethod === 'market' ? currentPrice : Number(limitPrice);
   const orderTotal = Number(quantity) * orderPrice;
 
@@ -56,7 +55,6 @@ const MarketOrder = ({ symbol, currentPrice, onPlaceOrder }: MarketOrderProps) =
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Check if user is logged in
     const { data: sessionData } = await supabase.auth.getSession();
     if (!sessionData.session) {
       toast.error("Please log in to place orders");
@@ -77,39 +75,26 @@ const MarketOrder = ({ symbol, currentPrice, onPlaceOrder }: MarketOrderProps) =
     setIsSubmitting(true);
 
     try {
-      const order: OrderDetails = {
-        type: orderType,
-        orderType: orderMethod,
-        symbol,
-        quantity: Number(quantity),
-        price: orderPrice,
-        total: orderTotal,
-        timestamp: new Date(),
-      };
-
-      // Save trade to database
       const { data: trade, error } = await supabase
         .from('trades')
         .insert([{
           user_id: sessionData.session.user.id,
-          symbol: order.symbol,
-          quantity: order.quantity,
-          price: order.price,
-          total: order.total,
-          type: order.type,
-          order_type: order.orderType,
+          symbol,
+          quantity: Number(quantity),
+          price: orderPrice,
+          total: orderTotal,
+          type: orderType,
+          order_type: orderMethod,
         }])
         .select()
         .single();
       
       if (error) throw error;
       
-      // Call onPlaceOrder callback if provided
-      if (onPlaceOrder) {
-        onPlaceOrder(order);
+      if (onPlaceOrder && trade) {
+        onPlaceOrder(trade as Trade);
       }
 
-      // Show toast notification
       toast.success(
         `${orderType === 'buy' ? 'Bought' : 'Sold'} ${quantity} ${symbol}`,
         {
@@ -117,7 +102,6 @@ const MarketOrder = ({ symbol, currentPrice, onPlaceOrder }: MarketOrderProps) =
         }
       );
 
-      // Reset form
       setQuantity('');
     } catch (error: any) {
       console.error('Error placing order:', error);

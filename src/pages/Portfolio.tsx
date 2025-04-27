@@ -6,7 +6,8 @@ import { formatPrice, formatPercentage, fetchCryptoData } from "@/utils/marketDa
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
-import { OrderDetails } from "@/components/trading/MarketOrder";
+import { Trade } from "@/types/trade";
+import type { Database } from "@/integrations/supabase/types";
 
 interface PortfolioAsset {
   id: string;
@@ -20,24 +21,13 @@ interface PortfolioAsset {
   pnlPercent: number;
 }
 
-interface UserTrade {
-  id: string;
-  user_id: string;
-  symbol: string;
-  quantity: number;
-  price: number;
-  total: number;
-  type: 'buy' | 'sell';
-  created_at: string;
-}
-
 const Portfolio = () => {
   const [assets, setAssets] = useState<PortfolioAsset[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalValue, setTotalValue] = useState(0);
   const [totalPnl, setTotalPnl] = useState(0);
   const [totalPnlPercent, setTotalPnlPercent] = useState(0);
-  const [recentTrades, setRecentTrades] = useState<UserTrade[]>([]);
+  const [recentTrades, setRecentTrades] = useState<Trade[]>([]);
   const navigate = useNavigate();
   
   useEffect(() => {
@@ -60,15 +50,15 @@ const Portfolio = () => {
         const { data: sessionData } = await supabase.auth.getSession();
         if (!sessionData.session) return;
         
-        const { data: userTrades, error } = await supabase
+        const { data: trades, error } = await supabase
           .from('trades')
           .select('*')
           .order('created_at', { ascending: false });
         
         if (error) throw error;
         
-        if (userTrades && userTrades.length > 0) {
-          setRecentTrades(userTrades);
+        if (trades) {
+          setRecentTrades(trades as Trade[]);
           
           const portfolioMap = new Map<string, { 
             id: string, 
@@ -78,7 +68,7 @@ const Portfolio = () => {
             totalCost: number 
           }>();
           
-          userTrades.forEach((trade: UserTrade) => {
+          trades.forEach((trade: Trade) => {
             const symbol = trade.symbol;
             
             if (!portfolioMap.has(symbol)) {
