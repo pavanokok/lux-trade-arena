@@ -1,5 +1,6 @@
 
 import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Chart from "@/components/trading/Chart";
@@ -7,7 +8,8 @@ import MarketOrder, { OrderDetails } from "@/components/trading/MarketOrder";
 import MarketInfo from "@/components/trading/MarketInfo";
 import OrderBook from "@/components/trading/OrderBook";
 import { fetchCryptoData, fetchCryptoHistoricalData, MarketData, CandleData } from "@/utils/marketData";
-import { Bitcoin, Landmark, RefreshCcw } from "lucide-react";
+import { Bitcoin, Landmark, RefreshCcw, LoaderCircle } from "lucide-react";
+import { toast } from "sonner";
 
 const AVAILABLE_ASSETS = [
   { id: "bitcoin", symbol: "BTC", name: "Bitcoin", type: "crypto" },
@@ -17,8 +19,17 @@ const AVAILABLE_ASSETS = [
 ];
 
 const Trading = () => {
+  // Get the asset from URL parameters
+  const navigate = useNavigate();
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const assetSymbol = queryParams.get("symbol");
+  const assetId = queryParams.get("id");
+
   // States for the selected asset and time period
-  const [selectedAsset, setSelectedAsset] = useState(AVAILABLE_ASSETS[0]);
+  const [selectedAsset, setSelectedAsset] = useState(
+    AVAILABLE_ASSETS.find(asset => asset.id === assetId || asset.symbol === assetSymbol) || AVAILABLE_ASSETS[0]
+  );
   const [timeframe, setTimeframe] = useState("7d");
   
   // Market data states
@@ -26,6 +37,11 @@ const Trading = () => {
   const [chartData, setChartData] = useState<CandleData[]>([]);
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<OrderDetails[]>([]);
+
+  // Update URL when selected asset changes
+  useEffect(() => {
+    navigate(`/trading?symbol=${selectedAsset.symbol}&id=${selectedAsset.id}`, { replace: true });
+  }, [selectedAsset, navigate]);
 
   // Fetch market data when selected asset changes
   useEffect(() => {
@@ -36,6 +52,7 @@ const Trading = () => {
         setMarketData(data);
       } catch (error) {
         console.error("Error fetching market data:", error);
+        toast.error(`Error loading ${selectedAsset.name} data`);
       } finally {
         setLoading(false);
       }
@@ -59,6 +76,7 @@ const Trading = () => {
         setChartData(data);
       } catch (error) {
         console.error("Error fetching historical data:", error);
+        toast.error(`Error loading ${selectedAsset.name} chart data`);
       }
     };
 
@@ -68,6 +86,14 @@ const Trading = () => {
   // Handle order placement
   const handlePlaceOrder = (order: OrderDetails) => {
     setOrders((prev) => [order, ...prev]);
+    
+    // Show success notification
+    toast.success(
+      `${order.type === 'buy' ? 'Bought' : 'Sold'} ${order.quantity} ${order.symbol} at $${order.price.toFixed(2)}`,
+      {
+        description: `Total: $${order.total.toFixed(2)}`
+      }
+    );
   };
 
   // Manual refresh of data
@@ -80,8 +106,10 @@ const Trading = () => {
       const days = timeframe === "1d" ? 1 : timeframe === "7d" ? 7 : timeframe === "30d" ? 30 : 90;
       const historicalData = await fetchCryptoHistoricalData(selectedAsset.id, days);
       setChartData(historicalData);
+      toast.success("Market data refreshed");
     } catch (error) {
       console.error("Error refreshing data:", error);
+      toast.error("Error refreshing data");
     } finally {
       setLoading(false);
     }
@@ -94,7 +122,11 @@ const Trading = () => {
         
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={handleRefresh}>
-            <RefreshCcw className="h-4 w-4 mr-2" />
+            {loading ? (
+              <LoaderCircle className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <RefreshCcw className="h-4 w-4 mr-2" />
+            )}
             Refresh
           </Button>
         </div>
@@ -153,11 +185,20 @@ const Trading = () => {
               </div>
             </div>
             
-            <Chart 
-              data={chartData} 
-              height={400} 
-              symbol={selectedAsset.symbol} 
-            />
+            {chartData.length === 0 ? (
+              <div className="flex items-center justify-center h-[400px] bg-secondary/5 rounded-lg">
+                <div className="text-center">
+                  <LoaderCircle className="h-8 w-8 mx-auto mb-2 animate-spin text-muted-foreground" />
+                  <p className="text-muted-foreground">Loading chart data...</p>
+                </div>
+              </div>
+            ) : (
+              <Chart 
+                data={chartData} 
+                height={400} 
+                symbol={selectedAsset.symbol} 
+              />
+            )}
           </div>
           
           {/* Order book */}

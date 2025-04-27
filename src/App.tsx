@@ -10,12 +10,13 @@ import Footer from "./components/layout/Footer";
 
 import HomePage from "./pages/Index";
 import NotFound from "./pages/NotFound";
-
-// Create empty placeholder pages for navigation targets
 import SignupPage from "./pages/Signup";
 import DemoPage from "./pages/Demo";
 import TradingPage from "./pages/Trading";
 import MarketsPage from "./pages/Markets";
+import PortfolioPage from "./pages/Portfolio";
+import NewsPage from "./pages/News";
+import SettingsPage from "./pages/Settings";
 
 const queryClient = new QueryClient();
 
@@ -33,6 +34,9 @@ const App = () => (
             <Route path="/demo" element={<DemoPage />} />
             <Route path="/trading" element={<TradingPage />} />
             <Route path="/markets" element={<MarketsPage />} />
+            <Route path="/portfolio" element={<PortfolioPage />} />
+            <Route path="/news" element={<NewsPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

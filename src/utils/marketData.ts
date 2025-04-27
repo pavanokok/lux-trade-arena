@@ -1,5 +1,6 @@
 
 import axios from "axios";
+import { Time } from "lightweight-charts";
 
 // Types for our market data
 export interface MarketData {
@@ -14,7 +15,7 @@ export interface MarketData {
 }
 
 export interface CandleData {
-  time: number; // Unix timestamp
+  time: Time;  // Changed from number to Time type
   open: number;
   high: number;
   low: number;
@@ -62,7 +63,7 @@ export async function fetchCryptoHistoricalData(
     return response.data.prices.map((item: [number, number]) => {
       const [timestamp, price] = item;
       return {
-        time: timestamp / 1000, // Convert to seconds for lightweight-charts
+        time: timestamp / 1000 as Time, // Convert to seconds and cast as Time for lightweight-charts
         open: price,
         high: price * 1.001, // Simulate a small range for visualization
         low: price * 0.999,  // Simulate a small range for visualization
