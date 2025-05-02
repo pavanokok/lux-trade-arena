@@ -1,3 +1,4 @@
+
 import axios from "axios";
 import { Time } from "lightweight-charts";
 import { toast } from "sonner";
@@ -222,18 +223,24 @@ interface DefaultAssetMapEntry {
   type: AssetType;
 }
 
-const defaultAssetMap = new Map<string, DefaultAssetMapEntry>(
-  [
-    ...defaultCryptoAssets.map(asset => [
-      asset.symbol.toLowerCase(), 
-      { ...asset, type: AssetType.CRYPTO }
-    ]),
-    ...defaultStockAssets.map(asset => [
-      asset.symbol.toLowerCase(), 
-      { ...asset, type: AssetType.STOCK }
-    ])
-  ]
-);
+// Fix the map construction to properly type the entries
+const defaultAssetMap = new Map<string, DefaultAssetMapEntry>();
+
+// Add crypto assets to the map
+defaultCryptoAssets.forEach(asset => {
+  defaultAssetMap.set(asset.symbol.toLowerCase(), {
+    ...asset,
+    type: AssetType.CRYPTO
+  });
+});
+
+// Add stock assets to the map
+defaultStockAssets.forEach(asset => {
+  defaultAssetMap.set(asset.symbol.toLowerCase(), {
+    ...asset,
+    type: AssetType.STOCK
+  });
+});
 
 // Fetch crypto data from CoinGecko
 export async function fetchCryptoData(coinId: string): Promise<MarketData | null> {
