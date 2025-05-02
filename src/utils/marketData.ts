@@ -38,8 +38,8 @@ export async function fetchCryptoData(coinId: string): Promise<MarketData | null
       changePercent: data.market_data.price_change_percentage_24h,
       high: data.market_data.high_24h.usd,
       low: data.market_data.low_24h.usd,
-      volume: formatCurrency(data.market_data.total_volume.usd),
-      marketCap: formatCurrency(data.market_data.market_cap.usd),
+      volume: formatLargeNumber(data.market_data.total_volume.usd),
+      marketCap: formatLargeNumber(data.market_data.market_cap.usd),
     };
   } catch (error) {
     console.error("Error fetching crypto data:", error);
@@ -75,22 +75,62 @@ export async function fetchCryptoHistoricalData(
   }
 }
 
-// Format large numbers to currency format with K, M, B suffixes
-export function formatCurrency(value: number): string {
-  if (value >= 1000000000) {
-    return `$${(value / 1000000000).toFixed(2)}B`;
+// Get current price for an asset
+export async function getAssetCurrentPrice(symbol: string): Promise<number | null> {
+  try {
+    // Check local storage cache first to avoid excessive API calls
+    const cacheKey = `price_${symbol.toLowerCase()}`;
+    const cachedData = localStorage.getItem(cacheKey);
+    const now = Date.now();
+    
+    if (cachedData) {
+      const { price, timestamp } = JSON.parse(cachedData);
+      // Use cache if it's less than 5 minutes old
+      if (now - timestamp < 5 * 60 * 1000) {
+        return price;
+      }
+    }
+    
+    // For crypto, use coinId to fetch from CoinGecko
+    const coinId = symbol.toLowerCase();
+    const data = await fetchCryptoData(coinId);
+    
+    if (data && data.price) {
+      // Cache the result
+      localStorage.setItem(cacheKey, JSON.stringify({ price: data.price, timestamp: now }));
+      return data.price;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error(`Error fetching price for ${symbol}:`, error);
+    return null;
   }
-  if (value >= 1000000) {
-    return `$${(value / 1000000).toFixed(2)}M`;
+}
+
+// Format large numbers to currency format with K, M, B, T suffixes
+export function formatLargeNumber(value: number): string {
+  if (value >= 1_000_000_000_000) {
+    return `$${(value / 1_000_000_000_000).toFixed(2)}T`;
   }
-  if (value >= 1000) {
-    return `$${(value / 1000).toFixed(2)}K`;
+  if (value >= 1_000_000_000) {
+    return `$${(value / 1_000_000_000).toFixed(2)}B`;
+  }
+  if (value >= 1_000_000) {
+    return `$${(value / 1_000_000).toFixed(2)}M`;
+  }
+  if (value >= 1_000) {
+    return `$${(value / 1_000).toFixed(2)}K`;
   }
   return `$${value.toFixed(2)}`;
 }
 
 // Format number as currency without abbreviation
-export function formatPrice(price: number): string {
+export function formatPrice(price: number | null): string {
+  if (price === null || isNaN(price)) {
+    return 'Price Unavailable';
+  }
+  
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',

@@ -5,95 +5,41 @@
 
 @layer base {
   :root {
-    --background: 222 47% 11%;
-    --foreground: 210 40% 98%;
+    --background: 224 71% 4%;
+    --foreground: 213 31% 91%;
 
-    --card: 222 47% 13%;
-    --card-foreground: 210 40% 98%;
+    --muted: 223 47% 11%;
+    --muted-foreground: 215.4 16.3% 56.9%;
 
-    --popover: 222 47% 11%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 224 71% 4%;
+    --popover-foreground: 215 20.2% 65.1%;
 
-    --primary: 177 80% 25%;
-    --primary-foreground: 210 40% 98%;
+    --card: 224 71% 4%;
+    --card-foreground: 213 31% 91%;
 
-    --secondary: 217 32% 17%;
+    --border: 216 34% 17%;
+    --input: 216 34% 17%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 1.2%;
+
+    --secondary: 222.2 47.4% 11.2%;
     --secondary-foreground: 210 40% 98%;
 
-    --muted: 217 32% 17%;
-    --muted-foreground: 215 20% 65%;
+    --accent: 175 84% 32%;
+    --accent-foreground: 210 40% 98%;
 
-    --accent: 48 96% 53%;
-    --accent-foreground: 222 47% 11%;
+    --success: 142.1 70.6% 45.3%;
+    --success-foreground: 144.9 80.4% 10%;
 
-    --destructive: 0 84% 60%;
+    --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
-    --success: 142 76% 36%;
-    --success-foreground: 210 40% 98%;
-
-    --danger: 0 84% 60%;
-    --danger-foreground: 210 40% 98%;
-
-    --border: 217 32% 17%;
-    --input: 217 32% 17%;
-    --ring: 212 100% 47%;
+    --ring: 216 34% 17%;
+    --radius: 0.5rem;
     
-    --radius: 0.75rem;
-
-    --sidebar-background: 222 47% 9%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 177 80% 25%;
-    --sidebar-primary-foreground: 210 40% 98%;
-    --sidebar-accent: 222 47% 13%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 222 47% 13%;
-    --sidebar-ring: 179 100% 40%;
-  }
-
-  .light {
-    --background: 210 40% 98%;
-    --foreground: 222 47% 11%;
-
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-
-    --primary: 177 80% 25%;
-    --primary-foreground: 210 40% 98%;
-
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
-
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
-
-    --accent: 48 96% 53%;
-    --accent-foreground: 222 47% 11%;
-
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-
-    --success: 142 76% 36%;
-    --success-foreground: 0 0% 100%;
-
-    --danger: 0 84% 60%;
-    --danger-foreground: 0 0% 100%;
-
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 212 100% 47%;
-
-    --sidebar-background: 210 40% 96%;
-    --sidebar-foreground: 222 47% 11%;
-    --sidebar-primary: 177 80% 25%;
-    --sidebar-primary-foreground: 210 40% 98%;
-    --sidebar-accent: 210 40% 96%;
-    --sidebar-accent-foreground: 222 47% 11%;
-    --sidebar-border: 214 32% 91%;
-    --sidebar-ring: 179 100% 40%;
+    --danger: 0 84.2% 60.2%;
+    --danger-foreground: 210 40% 98%;
   }
 }
 
@@ -101,77 +47,42 @@
   * {
     @apply border-border;
   }
-
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
+}
 
-  ::-webkit-scrollbar {
-    @apply w-2 h-2;
+/* Ticker animation */
+@keyframes ticker {
+  0% {
+    transform: translateX(0);
   }
-
-  ::-webkit-scrollbar-track {
-    @apply bg-transparent;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    @apply bg-muted rounded-full;
+  100% {
+    transform: translateX(-50%);
   }
 }
 
-@layer components {
-  .glass-card {
-    @apply bg-gradient-glass border border-border/40 backdrop-blur-sm shadow-glass rounded-lg;
-  }
-  
-  .premium-border {
-    @apply border border-gold/30;
-  }
-  
-  .ticker-item {
-    @apply inline-block px-4;
-  }
-  
-  .market-up {
-    @apply text-success;
-  }
-  
-  .market-down {
-    @apply text-danger;
-  }
+.animate-ticker {
+  animation: ticker 45s linear infinite;
+}
 
-  .animated-gradient {
-    background: linear-gradient(92deg, #0d9488, #14b8a6, #eab308, #ca8a04);
-    background-size: 800% 800%;
-    animation: gradient-animation 8s ease infinite;
-  }
+.ticker-item {
+  padding: 0 1rem;
+}
 
-  @keyframes gradient-animation {
-    0% { background-position: 0% 50% }
-    50% { background-position: 100% 50% }
-    100% { background-position: 0% 50% }
-  }
+/* Button glow effect */
+.shadow-glow {
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.7);
+}
 
-  /* Trading platform specific styles */
-  .chart-area {
-    @apply rounded-lg overflow-hidden border border-border/40;
-  }
+/* Fonts */
+.font-display {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  letter-spacing: -0.025em;
+}
 
-  .asset-pill {
-    @apply px-3 py-1.5 rounded-full text-xs font-medium border border-border/40 hover:bg-secondary/40 transition-colors cursor-pointer;
-  }
-
-  .asset-pill.active {
-    @apply bg-primary text-primary-foreground border-primary;
-  }
-
-  .animate-ticker {
-    animation: ticker 30s linear infinite;
-  }
-
-  @keyframes ticker {
-    0% { transform: translateX(0); }
-    100% { transform: translateX(-100%); }
-  }
+/* For charts and graphs */
+svg.recharts-surface {
+  overflow: visible;
 }

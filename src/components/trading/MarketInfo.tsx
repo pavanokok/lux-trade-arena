@@ -1,6 +1,6 @@
 
 import { ArrowDown, ArrowUp } from 'lucide-react';
-import { formatPrice, formatPercentage, MarketData } from '@/utils/marketData';
+import { formatPrice, formatPercentage, MarketData, formatLargeNumber } from '@/utils/marketData';
 
 interface MarketInfoProps {
   data: MarketData | null;

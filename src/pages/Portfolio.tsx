@@ -1,29 +1,18 @@
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowUp, ArrowDown, RefreshCcw, Loader2 } from "lucide-react";
-import { formatPrice, formatPercentage, fetchCryptoData } from "@/utils/marketData";
+import { formatPrice, formatPercentage, getAssetCurrentPrice } from "@/utils/marketData";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
-import { Trade } from "@/types/trade";
-import type { Database } from "@/integrations/supabase/types";
-
-interface PortfolioAsset {
-  id: string;
-  symbol: string;
-  name: string;
-  quantity: number;
-  avgBuyPrice: number;
-  currentPrice: number;
-  totalValue: number;
-  pnl: number;
-  pnlPercent: number;
-}
+import { Trade, Position } from "@/types/trade";
 
 const Portfolio = () => {
-  const [assets, setAssets] = useState<PortfolioAsset[]>([]);
+  const [positions, setPositions] = useState<Position[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [totalValue, setTotalValue] = useState(0);
   const [totalPnl, setTotalPnl] = useState(0);
   const [totalPnlPercent, setTotalPnlPercent] = useState(0);
@@ -43,160 +32,167 @@ const Portfolio = () => {
   }, [navigate]);
   
   useEffect(() => {
-    const fetchUserTrades = async () => {
-      setLoading(true);
-      
-      try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        if (!sessionData.session) return;
-        
-        const { data: trades, error } = await supabase
-          .from('trades')
-          .select('*')
-          .order('created_at', { ascending: false });
-        
-        if (error) throw error;
-        
-        if (trades) {
-          setRecentTrades(trades as Trade[]);
-          
-          const portfolioMap = new Map<string, { 
-            id: string, 
-            symbol: string,
-            name: string,
-            quantity: number, 
-            totalCost: number 
-          }>();
-          
-          trades.forEach((trade: Trade) => {
-            const symbol = trade.symbol;
-            
-            if (!portfolioMap.has(symbol)) {
-              portfolioMap.set(symbol, {
-                id: symbol.toLowerCase(),
-                symbol,
-                name: symbol,
-                quantity: 0,
-                totalCost: 0
-              });
-            }
-            
-            const position = portfolioMap.get(symbol)!;
-            
-            if (trade.type === 'buy') {
-              position.quantity += trade.quantity;
-              position.totalCost += trade.total;
-            } else {
-              position.quantity -= trade.quantity;
-              position.totalCost -= (position.totalCost / (position.quantity + trade.quantity)) * trade.quantity;
-            }
-          });
-          
-          const positions = Array.from(portfolioMap.values()).filter(p => p.quantity > 0);
-          
-          const updatedAssets = await Promise.all(positions.map(async (position) => {
-            try {
-              const marketData = await fetchCryptoData(position.id);
-              const currentPrice = marketData?.price || 0;
-              const totalValue = position.quantity * currentPrice;
-              const avgBuyPrice = position.quantity > 0 ? position.totalCost / position.quantity : 0;
-              const pnl = totalValue - position.totalCost;
-              const pnlPercent = position.totalCost > 0 ? (pnl / position.totalCost) * 100 : 0;
-              
-              return {
-                id: position.id,
-                symbol: position.symbol,
-                name: position.name,
-                quantity: position.quantity,
-                avgBuyPrice,
-                currentPrice,
-                totalValue,
-                pnl,
-                pnlPercent
-              };
-            } catch (error) {
-              console.error(`Error fetching price for ${position.symbol}:`, error);
-              return {
-                id: position.id,
-                symbol: position.symbol,
-                name: position.symbol,
-                quantity: position.quantity,
-                avgBuyPrice: position.quantity > 0 ? position.totalCost / position.quantity : 0,
-                currentPrice: 0,
-                totalValue: 0,
-                pnl: 0,
-                pnlPercent: 0
-              };
-            }
-          }));
-          
-          const totalVal = updatedAssets.reduce((sum, asset) => sum + asset.totalValue, 0);
-          const totalCost = updatedAssets.reduce((sum, asset) => sum + (asset.avgBuyPrice * asset.quantity), 0);
-          const totalPnlVal = totalVal - totalCost;
-          const totalPnlPercentVal = totalCost > 0 ? (totalPnlVal / totalCost) * 100 : 0;
-          
-          setAssets(updatedAssets);
-          setTotalValue(totalVal);
-          setTotalPnl(totalPnlVal);
-          setTotalPnlPercent(totalPnlPercentVal);
-        } else {
-          setAssets([]);
-          setTotalValue(0);
-          setTotalPnl(0);
-          setTotalPnlPercent(0);
-        }
-      } catch (error: any) {
-        console.error("Error fetching portfolio data:", error);
-        toast.error("Failed to load portfolio data");
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchUserTrades();
+    fetchUserPortfolio();
   }, []);
   
-  const handleRefresh = () => {
+  const fetchUserPortfolio = async () => {
     setLoading(true);
     
-    const fetchData = async () => {
-      try {
-        const updatedAssets = await Promise.all(assets.map(async (asset) => {
-          const marketData = await fetchCryptoData(asset.id);
-          const currentPrice = marketData?.price || 0;
-          const totalValue = asset.quantity * currentPrice;
-          const pnl = totalValue - (asset.avgBuyPrice * asset.quantity);
-          const pnlPercent = (asset.avgBuyPrice > 0) ? (pnl / (asset.avgBuyPrice * asset.quantity)) * 100 : 0;
-          
-          return {
-            ...asset,
-            currentPrice,
-            totalValue,
-            pnl,
-            pnlPercent
-          };
-        }));
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) return;
+      
+      // Fetch user trades
+      const { data: trades, error: tradesError } = await supabase
+        .from('trades')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (tradesError) throw tradesError;
+      
+      if (trades) {
+        setRecentTrades(trades as Trade[]);
         
-        const totalVal = updatedAssets.reduce((sum, asset) => sum + asset.totalValue, 0);
-        const totalCost = updatedAssets.reduce((sum, asset) => sum + (asset.avgBuyPrice * asset.quantity), 0);
-        const totalPnlVal = totalVal - totalCost;
+        // Process trades to calculate positions
+        const positions = await processTradesIntoPositions(trades as Trade[]);
+        setPositions(positions);
+        
+        // Calculate portfolio totals
+        const totalVal = positions.reduce((sum, pos) => sum + pos.totalValue, 0);
+        const totalCost = positions.reduce((sum, pos) => {
+          if (pos.type === 'long') {
+            return sum + (pos.avgBuyPrice * pos.quantity);
+          } else {
+            // For short positions, cost basis is calculated differently
+            return sum + (pos.avgBuyPrice * Math.abs(pos.quantity));
+          }
+        }, 0);
+        
+        const totalPnlVal = positions.reduce((sum, pos) => sum + pos.pnl, 0);
         const totalPnlPercentVal = totalCost > 0 ? (totalPnlVal / totalCost) * 100 : 0;
         
-        setAssets(updatedAssets);
         setTotalValue(totalVal);
         setTotalPnl(totalPnlVal);
         setTotalPnlPercent(totalPnlPercentVal);
-        
-        toast.success("Portfolio refreshed with latest prices");
-      } catch (error) {
-        console.error("Error refreshing prices:", error);
-        toast.error("Failed to refresh portfolio data");
-      } finally {
-        setLoading(false);
       }
-    };
+    } catch (error: any) {
+      console.error("Error fetching portfolio data:", error);
+      toast.error("Failed to load portfolio data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const processTradesIntoPositions = async (trades: Trade[]): Promise<Position[]> => {
+    const posMap = new Map<string, { 
+      symbol: string,
+      name: string,
+      quantity: number, 
+      totalCost: number,
+      type: 'long' | 'short'
+    }>();
     
-    fetchData();
+    // Process trades to build positions
+    for (const trade of trades) {
+      const symbol = trade.symbol;
+      const mapKey = `${symbol}-${trade.type === 'buy' || trade.type === 'cover' ? 'long' : 'short'}`;
+      
+      if (!posMap.has(mapKey)) {
+        posMap.set(mapKey, {
+          symbol,
+          name: symbol, // We'll update this if we get more info
+          quantity: 0,
+          totalCost: 0,
+          type: trade.type === 'buy' || trade.type === 'cover' ? 'long' : 'short'
+        });
+      }
+      
+      const position = posMap.get(mapKey)!;
+      
+      if (trade.type === 'buy') {
+        position.quantity += trade.quantity;
+        position.totalCost += trade.total;
+      } 
+      else if (trade.type === 'sell') {
+        position.quantity -= trade.quantity;
+        position.totalCost -= (position.totalCost / (position.quantity + trade.quantity)) * trade.quantity;
+      }
+      else if (trade.type === 'short') {
+        position.quantity -= trade.quantity; // Negative for shorts
+        position.totalCost += trade.total; // Money received
+      }
+      else if (trade.type === 'cover') {
+        position.quantity += trade.quantity; // Reducing the short position
+        position.totalCost -= trade.total; // Money paid to cover
+      }
+    }
+    
+    // Remove closed positions (quantity = 0)
+    for (const [key, position] of posMap.entries()) {
+      if (Math.abs(position.quantity) < 0.00000001) {
+        posMap.delete(key);
+      }
+    }
+    
+    // Convert to Position objects with current prices
+    const positions: Position[] = [];
+    for (const position of posMap.values()) {
+      // Skip positions with zero quantity
+      if (Math.abs(position.quantity) < 0.00000001) continue;
+      
+      // Fetch current price for the asset
+      const currentPrice = await getAssetCurrentPrice(position.symbol.toLowerCase());
+      
+      const avgBuyPrice = Math.abs(position.quantity) > 0 ? 
+        Math.abs(position.totalCost / position.quantity) : 0;
+      
+      let totalValue = 0;
+      let pnl = 0;
+      let pnlPercent = 0;
+      
+      if (currentPrice !== null) {
+        if (position.type === 'long') {
+          totalValue = position.quantity * currentPrice;
+          pnl = totalValue - position.totalCost;
+          pnlPercent = position.totalCost > 0 ? (pnl / position.totalCost) * 100 : 0;
+        } else {
+          // For short positions
+          const originalValue = Math.abs(position.quantity) * avgBuyPrice;
+          const currentValue = Math.abs(position.quantity) * currentPrice;
+          totalValue = currentValue;
+          pnl = originalValue - currentValue; // Profit if current value is less than original
+          pnlPercent = originalValue > 0 ? (pnl / originalValue) * 100 : 0;
+        }
+      }
+      
+      positions.push({
+        symbol: position.symbol,
+        name: position.name,
+        quantity: position.quantity,
+        avgBuyPrice,
+        currentPrice,
+        totalValue,
+        pnl,
+        pnlPercent,
+        type: position.type
+      });
+    }
+    
+    return positions;
+  };
+  
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    
+    try {
+      await fetchUserPortfolio();
+      toast.success("Portfolio refreshed with latest prices");
+    } catch (error) {
+      console.error("Error refreshing portfolio:", error);
+      toast.error("Failed to refresh portfolio data");
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   return (
@@ -208,8 +204,8 @@ const Portfolio = () => {
             Track your trading performance
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={handleRefresh} disabled={loading}>
-          {loading ? (
+        <Button variant="outline" size="sm" onClick={handleRefresh} disabled={loading || refreshing}>
+          {(loading || refreshing) ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
           ) : (
             <RefreshCcw className="h-4 w-4 mr-2" />
@@ -273,7 +269,7 @@ const Portfolio = () => {
                 </div>
               ))}
             </div>
-          ) : assets.length === 0 ? (
+          ) : positions.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-muted-foreground">You don't have any assets yet</p>
               <Button variant="outline" className="mt-4" onClick={() => navigate('/trading')}>
@@ -286,6 +282,7 @@ const Portfolio = () => {
                 <thead>
                   <tr className="border-b border-border/40">
                     <th className="text-left py-3 font-medium">Asset</th>
+                    <th className="text-right py-3 font-medium">Type</th>
                     <th className="text-right py-3 font-medium">Quantity</th>
                     <th className="text-right py-3 font-medium">Avg Price</th>
                     <th className="text-right py-3 font-medium">Current Price</th>
@@ -294,41 +291,44 @@ const Portfolio = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {assets.map((asset) => (
-                    <tr key={asset.id} className="border-b border-border/20 hover:bg-secondary/5">
+                  {positions.map((position) => (
+                    <tr key={`${position.symbol}-${position.type}`} className="border-b border-border/20 hover:bg-secondary/5">
                       <td className="py-3">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center">
-                            <span className="text-xs font-medium">{asset.symbol}</span>
+                            <span className="text-xs font-medium">{position.symbol.substring(0, 3)}</span>
                           </div>
                           <div>
-                            <p className="font-medium">{asset.name}</p>
+                            <p className="font-medium">{position.name}</p>
                             <p className="text-xs text-muted-foreground uppercase">
-                              {asset.symbol}
+                              {position.symbol}
                             </p>
                           </div>
                         </div>
                       </td>
-                      <td className="text-right py-3 font-mono">
-                        {asset.quantity.toFixed(asset.quantity < 1 ? 6 : 2)}
+                      <td className={`text-right py-3 ${position.type === 'long' ? 'text-success' : 'text-destructive'}`}>
+                        {position.type === 'long' ? 'LONG' : 'SHORT'}
                       </td>
                       <td className="text-right py-3 font-mono">
-                        {formatPrice(asset.avgBuyPrice)}
+                        {Math.abs(position.quantity).toFixed(position.quantity < 1 ? 6 : 2)}
                       </td>
                       <td className="text-right py-3 font-mono">
-                        {formatPrice(asset.currentPrice)}
+                        {formatPrice(position.avgBuyPrice)}
                       </td>
                       <td className="text-right py-3 font-mono">
-                        {formatPrice(asset.totalValue)}
+                        {position.currentPrice !== null ? formatPrice(position.currentPrice) : 'Price Unavailable'}
                       </td>
-                      <td className={`text-right py-3 ${asset.pnl >= 0 ? 'text-success' : 'text-destructive'}`}>
+                      <td className="text-right py-3 font-mono">
+                        {formatPrice(position.totalValue)}
+                      </td>
+                      <td className={`text-right py-3 ${position.pnl >= 0 ? 'text-success' : 'text-destructive'}`}>
                         <div className="flex items-center justify-end">
-                          {asset.pnl >= 0 ? (
+                          {position.pnl >= 0 ? (
                             <ArrowUp className="h-3 w-3 mr-1" />
                           ) : (
                             <ArrowDown className="h-3 w-3 mr-1" />
                           )}
-                          {formatPrice(asset.pnl)} ({formatPercentage(asset.pnlPercent)})
+                          {formatPrice(position.pnl)} ({formatPercentage(position.pnlPercent)})
                         </div>
                       </td>
                     </tr>
@@ -362,18 +362,22 @@ const Portfolio = () => {
                 <tbody>
                   {recentTrades.map((trade) => (
                     <tr key={trade.id} className="border-b border-border/20 hover:bg-secondary/5">
-                      <td className={`py-2 ${trade.type === 'buy' ? 'text-success' : 'text-destructive'}`}>
-                        {trade.type === 'buy' ? 'Buy' : 'Sell'}
+                      <td className={`py-2 ${
+                        trade.type === 'buy' || trade.type === 'cover' ? 'text-success' : 'text-destructive'
+                      }`}>
+                        {trade.type === 'buy' ? 'Buy' : 
+                         trade.type === 'sell' ? 'Sell' :
+                         trade.type === 'short' ? 'Short' : 'Cover'}
                       </td>
                       <td className="py-2">{trade.symbol}</td>
                       <td className="py-2 text-right font-mono">
-                        ${trade.price.toFixed(2)}
+                        {formatPrice(trade.price)}
                       </td>
                       <td className="py-2 text-right font-mono">
                         {trade.quantity.toFixed(4)}
                       </td>
                       <td className="py-2 text-right font-mono">
-                        ${trade.total.toFixed(2)}
+                        {formatPrice(trade.total)}
                       </td>
                       <td className="py-2 text-right">
                         {new Date(trade.created_at).toLocaleDateString()} {new Date(trade.created_at).toLocaleTimeString()}

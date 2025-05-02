@@ -1,30 +1,92 @@
 
-import { useRef, useEffect } from "react";
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { useRef, useEffect, useState } from "react";
+import { ArrowDown, ArrowUp, Loader2 } from "lucide-react";
+import { getAssetCurrentPrice, formatPrice } from "@/utils/marketData";
+import { toast } from "sonner";
 
 interface Ticker {
   symbol: string;
   name: string;
-  price: number;
+  price: number | null;
   change: number;
+  isLoading: boolean;
 }
 
-const tickers: Ticker[] = [
-  { symbol: "BTC", name: "Bitcoin", price: 56842.12, change: 3.42 },
-  { symbol: "ETH", name: "Ethereum", price: 3245.67, change: 2.18 },
-  { symbol: "SPY", name: "S&P 500 ETF", price: 507.73, change: 0.85 },
-  { symbol: "QQQ", name: "Nasdaq 100 ETF", price: 437.52, change: -0.34 },
-  { symbol: "SOL", name: "Solana", price: 123.45, change: 5.67 },
-  { symbol: "AAPL", name: "Apple", price: 182.89, change: 1.34 },
-  { symbol: "MSFT", name: "Microsoft", price: 415.56, change: 0.89 },
-  { symbol: "GOOGL", name: "Google", price: 146.95, change: -0.23 },
-  { symbol: "AMZN", name: "Amazon", price: 178.75, change: 2.45 },
-  { symbol: "TSLA", name: "Tesla", price: 176.75, change: -1.98 },
+// List of tickers to display in the banner
+const initialTickers: Ticker[] = [
+  { symbol: "BTC", name: "Bitcoin", price: null, change: 0, isLoading: true },
+  { symbol: "ETH", name: "Ethereum", price: null, change: 0, isLoading: true },
+  { symbol: "SOL", name: "Solana", price: null, change: 0, isLoading: true },
+  { symbol: "DOGE", name: "Dogecoin", price: null, change: 0, isLoading: true },
+  { symbol: "MATIC", name: "Polygon", price: null, change: 0, isLoading: true },
+  { symbol: "ADA", name: "Cardano", price: null, change: 0, isLoading: true },
+  { symbol: "XRP", name: "Ripple", price: null, change: 0, isLoading: true },
+  { symbol: "DOT", name: "Polkadot", price: null, change: 0, isLoading: true },
+  { symbol: "AVAX", name: "Avalanche", price: null, change: 0, isLoading: true },
+  { symbol: "LINK", name: "Chainlink", price: null, change: 0, isLoading: true },
 ];
 
 const PriceTickerBanner = () => {
   const tickerRef = useRef<HTMLDivElement>(null);
+  const [tickers, setTickers] = useState<Ticker[]>(initialTickers);
+  const [isLoading, setIsLoading] = useState(true);
 
+  // Fetch current prices for all tickers
+  useEffect(() => {
+    const fetchPrices = async () => {
+      try {
+        const updatedTickers = await Promise.all(
+          tickers.map(async (ticker) => {
+            try {
+              // Attempt to get current price
+              const price = await getAssetCurrentPrice(ticker.symbol.toLowerCase());
+              
+              // Simulate change value calculation (in a real app, this would come from the API)
+              // Here we're using a simplified approach with random changes
+              const prevPrice = localStorage.getItem(`prev_price_${ticker.symbol.toLowerCase()}`);
+              let change = ticker.change;
+              
+              if (price !== null) {
+                if (prevPrice) {
+                  change = ((price - parseFloat(prevPrice)) / parseFloat(prevPrice)) * 100;
+                } else {
+                  // If no previous price, generate a random change between -5 and +5
+                  change = (Math.random() * 10) - 5;
+                }
+                // Store current price as previous for next time
+                localStorage.setItem(`prev_price_${ticker.symbol.toLowerCase()}`, price.toString());
+              }
+              
+              return {
+                ...ticker,
+                price,
+                change,
+                isLoading: false
+              };
+            } catch (error) {
+              console.error(`Error fetching price for ${ticker.symbol}:`, error);
+              return { ...ticker, isLoading: false };
+            }
+          })
+        );
+        
+        setTickers(updatedTickers);
+        setIsLoading(false);
+      } catch (error) {
+        console.error("Error fetching ticker data:", error);
+        setIsLoading(false);
+        toast.error("Failed to load market data");
+      }
+    };
+    
+    fetchPrices();
+    
+    // Refresh prices every 60 seconds
+    const intervalId = setInterval(fetchPrices, 60000);
+    return () => clearInterval(intervalId);
+  }, []);
+
+  // Handle animation pause/play based on visibility
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -52,18 +114,44 @@ const PriceTickerBanner = () => {
     };
   }, []);
 
+  // Filter out tickers with no price data
+  const validTickers = tickers.filter(ticker => ticker.price !== null);
+  
+  if (isLoading) {
+    return (
+      <div className="w-full overflow-hidden bg-background border-y border-border/40 py-4">
+        <div className="flex items-center justify-center">
+          <Loader2 className="h-5 w-5 animate-spin mr-2" />
+          <span>Loading market data...</span>
+        </div>
+      </div>
+    );
+  }
+  
+  if (validTickers.length === 0) {
+    return (
+      <div className="w-full overflow-hidden bg-background border-y border-border/40 py-4">
+        <div className="flex items-center justify-center">
+          <span className="text-muted-foreground">Market data unavailable</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full overflow-hidden bg-background border-y border-border/40 py-4">
       <div className="flex whitespace-nowrap" ref={tickerRef}>
         {/* Duplicate tickers to create seamless loop */}
-        {[...tickers, ...tickers].map((ticker, index) => (
-          <div key={index} className="ticker-item flex items-center">
+        {[...validTickers, ...validTickers].map((ticker, index) => (
+          <div key={index} className="ticker-item flex items-center px-3">
             <span className="font-medium mr-2">{ticker.symbol}</span>
             <span className="text-muted-foreground mr-2">{ticker.name}</span>
-            <span className="font-mono mr-2">${ticker.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-            <span className={`flex items-center ${ticker.change >= 0 ? 'text-success' : 'text-danger'}`}>
+            <span className="font-mono mr-2">
+              {ticker.price !== null ? formatPrice(ticker.price) : 'Price Unavailable'}
+            </span>
+            <span className={`flex items-center ${ticker.change >= 0 ? 'text-success' : 'text-destructive'}`}>
               {ticker.change >= 0 ? <ArrowUp className="h-3 w-3 mr-1" /> : <ArrowDown className="h-3 w-3 mr-1" />}
-              {Math.abs(ticker.change)}%
+              {Math.abs(ticker.change).toFixed(2)}%
             </span>
           </div>
         ))}

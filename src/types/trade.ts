@@ -18,7 +18,7 @@ export interface Position {
   name: string;
   quantity: number;
   avgBuyPrice: number;
-  currentPrice: number;
+  currentPrice: number | null;
   totalValue: number;
   pnl: number;
   pnlPercent: number;
