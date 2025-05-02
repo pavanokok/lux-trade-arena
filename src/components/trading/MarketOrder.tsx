@@ -17,16 +17,6 @@ interface MarketOrderProps {
   onPlaceOrder?: (order: Trade) => void;
 }
 
-export interface OrderDetails {
-  type: 'buy' | 'sell';
-  orderType: 'market' | 'limit';
-  symbol: string;
-  quantity: number;
-  price: number;
-  total: number;
-  timestamp: Date;
-}
-
 const MarketOrder = ({ symbol, currentPrice, onPlaceOrder }: MarketOrderProps) => {
   const [orderType, setOrderType] = useState<'buy' | 'sell'>('buy');
   const [quantity, setQuantity] = useState<string>('');

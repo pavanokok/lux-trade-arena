@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Chart from "@/components/trading/Chart";
-import MarketOrder, { OrderDetails } from "@/components/trading/MarketOrder";
+import MarketOrder from "@/components/trading/MarketOrder";
 import MarketInfo from "@/components/trading/MarketInfo";
 import OrderBook from "@/components/trading/OrderBook";
 import { fetchCryptoData, fetchCryptoHistoricalData, searchAssets, MarketData, CandleData } from "@/utils/marketData";
@@ -12,6 +12,7 @@ import { Bitcoin, Search, RefreshCcw, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { Trade } from "@/types/trade";
 
 const AVAILABLE_ASSETS = [
   { id: "bitcoin", symbol: "BTC", name: "Bitcoin", type: "crypto" },
@@ -40,7 +41,7 @@ const Trading = () => {
   const [marketData, setMarketData] = useState<MarketData | null>(null);
   const [chartData, setChartData] = useState<CandleData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [orders, setOrders] = useState<OrderDetails[]>([]);
+  const [orders, setOrders] = useState<Trade[]>([]);
   
   // Search functionality
   const [searchQuery, setSearchQuery] = useState("");
@@ -116,7 +117,7 @@ const Trading = () => {
   }, [searchQuery]);
 
   // Handle order placement
-  const handlePlaceOrder = (order: OrderDetails) => {
+  const handlePlaceOrder = (order: Trade) => {
     setOrders((prev) => [order, ...prev]);
     
     // Show success notification
