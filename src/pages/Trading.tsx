@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -118,7 +117,13 @@ const Trading = () => {
 
   // Handle order placement
   const handlePlaceOrder = (order: Trade) => {
-    setOrders((prev) => [order, ...prev]);
+    // Create an enriched order object for display purposes
+    const displayOrder = {
+      ...order,
+      timestamp: new Date() // Add timestamp for display purposes
+    };
+    
+    setOrders((prev) => [displayOrder, ...prev]);
     
     // Show success notification
     toast.success(
@@ -291,7 +296,7 @@ const Trading = () => {
                     {orders.map((order, index) => (
                       <tr key={index} className="border-b border-border/20 hover:bg-secondary/5">
                         <td className={`py-2 ${order.type === 'buy' ? 'text-success' : 'text-destructive'}`}>
-                          {order.type === 'buy' ? 'Buy' : 'Sell'} ({order.orderType})
+                          {order.type === 'buy' ? 'Buy' : 'Sell'} ({order.order_type})
                         </td>
                         <td className="py-2">{order.symbol}</td>
                         <td className="py-2 text-right font-mono">
@@ -304,7 +309,7 @@ const Trading = () => {
                           ${order.total.toFixed(2)}
                         </td>
                         <td className="py-2 text-right">
-                          {order.timestamp.toLocaleTimeString()}
+                          {new Date(order.created_at).toLocaleTimeString()}
                         </td>
                       </tr>
                     ))}
