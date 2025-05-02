@@ -85,8 +85,8 @@ export async function getAssetCurrentPrice(symbol: string): Promise<number | nul
     
     if (cachedData) {
       const { price, timestamp } = JSON.parse(cachedData);
-      // Use cache if it's less than 5 minutes old
-      if (now - timestamp < 5 * 60 * 1000) {
+      // Use cache if it's less than 2 minutes old
+      if (now - timestamp < 2 * 60 * 1000) {
         return price;
       }
     }

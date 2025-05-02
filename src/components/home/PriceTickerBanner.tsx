@@ -88,6 +88,13 @@ const PriceTickerBanner = () => {
 
   // Handle animation pause/play based on visibility
   useEffect(() => {
+    if (tickerRef.current) {
+      // Force the animation to restart
+      tickerRef.current.classList.remove("animate-ticker");
+      void tickerRef.current.offsetWidth; // Trigger reflow
+      tickerRef.current.classList.add("animate-ticker");
+    }
+    
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
@@ -140,14 +147,14 @@ const PriceTickerBanner = () => {
 
   return (
     <div className="w-full overflow-hidden bg-background border-y border-border/40 py-4">
-      <div className="flex whitespace-nowrap" ref={tickerRef}>
+      <div className="flex whitespace-nowrap animate-ticker" ref={tickerRef}>
         {/* Duplicate tickers to create seamless loop */}
         {[...validTickers, ...validTickers].map((ticker, index) => (
           <div key={index} className="ticker-item flex items-center px-3">
             <span className="font-medium mr-2">{ticker.symbol}</span>
             <span className="text-muted-foreground mr-2">{ticker.name}</span>
             <span className="font-mono mr-2">
-              {ticker.price !== null ? formatPrice(ticker.price) : 'Price Unavailable'}
+              {ticker.price !== null ? formatPrice(ticker.price) : 'Loading...'}
             </span>
             <span className={`flex items-center ${ticker.change >= 0 ? 'text-success' : 'text-destructive'}`}>
               {ticker.change >= 0 ? <ArrowUp className="h-3 w-3 mr-1" /> : <ArrowDown className="h-3 w-3 mr-1" />}
