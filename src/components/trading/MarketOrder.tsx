@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { ArrowDown, ArrowUp, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -14,11 +15,20 @@ import type { Trade } from '@/types/trade';
 interface MarketOrderProps {
   symbol: string;
   currentPrice: number;
+  userBalance?: number;
+  userPositions?: any[];
   onPlaceOrder?: (order: Trade) => void;
 }
 
-const MarketOrder = ({ symbol, currentPrice, onPlaceOrder }: MarketOrderProps) => {
+const MarketOrder = ({ 
+  symbol, 
+  currentPrice, 
+  userBalance = 0, 
+  userPositions = [], 
+  onPlaceOrder 
+}: MarketOrderProps) => {
   const [orderType, setOrderType] = useState<'buy' | 'sell'>('buy');
+  const [positionType, setPositionType] = useState<'long' | 'short'>('long');
   const [quantity, setQuantity] = useState<string>('');
   const [limitPrice, setLimitPrice] = useState<string>(currentPrice.toString());
   const [orderMethod, setOrderMethod] = useState<'market' | 'limit'>('market');
@@ -27,6 +37,19 @@ const MarketOrder = ({ symbol, currentPrice, onPlaceOrder }: MarketOrderProps) =
   
   const orderPrice = orderMethod === 'market' ? currentPrice : Number(limitPrice);
   const orderTotal = Number(quantity) * orderPrice;
+
+  // Find relevant position to check if user can sell/cover
+  const relevantPosition = userPositions.find(p => 
+    p.symbol === symbol && 
+    ((orderType === 'sell' && p.type === 'long') || 
+     (orderType === 'buy' && positionType === 'short' && p.type === 'short'))
+  );
+  
+  // Calculate max quantity user can buy with available balance
+  const maxBuyQuantity = userBalance > 0 ? userBalance / orderPrice : 0;
+  
+  // Calculate max quantity user can sell from their holdings
+  const maxSellQuantity = relevantPosition ? Math.abs(relevantPosition.quantity) : 0;
 
   const handleQuantityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -39,6 +62,14 @@ const MarketOrder = ({ symbol, currentPrice, onPlaceOrder }: MarketOrderProps) =
     const value = e.target.value;
     if (!isNaN(Number(value)) || value === '') {
       setLimitPrice(value);
+    }
+  };
+  
+  const handleSetMaxQuantity = () => {
+    if (orderType === 'buy' && positionType === 'long') {
+      setQuantity(maxBuyQuantity.toFixed(4));
+    } else if (orderType === 'sell' || (orderType === 'buy' && positionType === 'short')) {
+      setQuantity(maxSellQuantity.toFixed(4));
     }
   };
 
@@ -61,10 +92,37 @@ const MarketOrder = ({ symbol, currentPrice, onPlaceOrder }: MarketOrderProps) =
       toast.error("Please enter a valid limit price");
       return;
     }
+    
+    // Check if user has enough balance for buy orders
+    if ((orderType === 'buy' && positionType === 'long') && orderTotal > userBalance) {
+      toast.error(`Insufficient funds. You need $${orderTotal.toFixed(2)} but have $${userBalance.toFixed(2)}`);
+      return;
+    }
+    
+    // Check if user has enough of the asset for sell orders
+    if (orderType === 'sell' && (!relevantPosition || Number(quantity) > maxSellQuantity)) {
+      toast.error(`You don't have enough ${symbol} to sell`);
+      return;
+    }
+    
+    // For covering short positions
+    if (orderType === 'buy' && positionType === 'short') {
+      if (!relevantPosition || Number(quantity) > maxSellQuantity) {
+        toast.error(`You don't have a short position of that size to cover`);
+        return;
+      }
+    }
 
     setIsSubmitting(true);
 
     try {
+      // Map the UI actions to the actual trade types
+      const tradeType = 
+        orderType === 'buy' && positionType === 'long' ? 'buy' :
+        orderType === 'sell' && positionType === 'long' ? 'sell' :
+        orderType === 'sell' && positionType === 'short' ? 'short' :
+        'cover'; // orderType === 'buy' && positionType === 'short'
+      
       const { data: trade, error } = await supabase
         .from('trades')
         .insert([{
@@ -73,7 +131,7 @@ const MarketOrder = ({ symbol, currentPrice, onPlaceOrder }: MarketOrderProps) =
           quantity: Number(quantity),
           price: orderPrice,
           total: orderTotal,
-          type: orderType,
+          type: tradeType,
           order_type: orderMethod,
         }])
         .select()
@@ -86,7 +144,11 @@ const MarketOrder = ({ symbol, currentPrice, onPlaceOrder }: MarketOrderProps) =
       }
 
       toast.success(
-        `${orderType === 'buy' ? 'Bought' : 'Sold'} ${quantity} ${symbol}`,
+        `${
+          tradeType === 'buy' ? 'Bought' : 
+          tradeType === 'sell' ? 'Sold' : 
+          tradeType === 'short' ? 'Shorted' : 'Covered'
+        } ${quantity} ${symbol}`,
         {
           description: `${formatPrice(orderPrice)} per unit · Total: ${formatPrice(orderTotal)}`
         }
@@ -130,15 +192,32 @@ const MarketOrder = ({ symbol, currentPrice, onPlaceOrder }: MarketOrderProps) =
                   </div>
                 </RadioGroup>
               </div>
+              
+              <div>
+                <RadioGroup defaultValue="long" onValueChange={(value) => setPositionType(value as 'long' | 'short')} className="flex space-x-4">
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="long" id="long" />
+                    <Label htmlFor="long">Long Position</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="short" id="short" />
+                    <Label htmlFor="short">Cover Short</Label>
+                  </div>
+                </RadioGroup>
+              </div>
 
               <div>
-                <Label htmlFor="quantity">Quantity</Label>
+                <div className="flex justify-between items-center mb-1">
+                  <Label htmlFor="quantity">Quantity</Label>
+                  <Button type="button" variant="ghost" size="sm" className="h-6 text-xs" onClick={handleSetMaxQuantity}>
+                    Max
+                  </Button>
+                </div>
                 <Input 
                   id="quantity" 
                   placeholder="0.00" 
                   value={quantity} 
                   onChange={handleQuantityChange} 
-                  className="mt-1" 
                 />
               </div>
 
@@ -155,12 +234,16 @@ const MarketOrder = ({ symbol, currentPrice, onPlaceOrder }: MarketOrderProps) =
                 </div>
               )}
 
-              <div>
+              <div className="rounded border border-border/40 p-3 bg-secondary/5">
                 <div className="flex justify-between text-sm text-muted-foreground mb-1">
                   <span>Current Price</span>
                   <span>{formatPrice(currentPrice)}</span>
                 </div>
                 <div className="flex justify-between text-sm text-muted-foreground mb-1">
+                  <span>{positionType === 'long' ? 'Available Balance' : 'Short Position'}</span>
+                  <span>{positionType === 'long' ? formatPrice(userBalance) : maxSellQuantity.toFixed(4)}</span>
+                </div>
+                <div className="flex justify-between text-sm font-medium mb-1">
                   <span>Order Total</span>
                   <span>{formatPrice(orderTotal || 0)}</span>
                 </div>
@@ -168,8 +251,17 @@ const MarketOrder = ({ symbol, currentPrice, onPlaceOrder }: MarketOrderProps) =
 
               <Button 
                 type="submit" 
-                className="w-full bg-success hover:bg-success/90 text-success-foreground"
-                disabled={isSubmitting}
+                className={`w-full ${
+                  positionType === 'long'
+                  ? 'bg-success hover:bg-success/90 text-success-foreground'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+                }`}
+                disabled={
+                  isSubmitting || 
+                  !quantity || 
+                  (positionType === 'long' && orderTotal > userBalance) || 
+                  (positionType === 'short' && Number(quantity) > maxSellQuantity)
+                }
               >
                 {isSubmitting ? (
                   <>
@@ -177,7 +269,7 @@ const MarketOrder = ({ symbol, currentPrice, onPlaceOrder }: MarketOrderProps) =
                     Processing...
                   </>
                 ) : (
-                  `Buy ${symbol}`
+                  `${positionType === 'long' ? 'Buy' : 'Cover'} ${symbol}`
                 )}
               </Button>
             </div>
@@ -199,15 +291,32 @@ const MarketOrder = ({ symbol, currentPrice, onPlaceOrder }: MarketOrderProps) =
                   </div>
                 </RadioGroup>
               </div>
+              
+              <div>
+                <RadioGroup defaultValue="long" onValueChange={(value) => setPositionType(value as 'long' | 'short')} className="flex space-x-4">
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="long" id="sell-long" />
+                    <Label htmlFor="sell-long">Sell Position</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="short" id="sell-short" />
+                    <Label htmlFor="sell-short">Short Sell</Label>
+                  </div>
+                </RadioGroup>
+              </div>
 
               <div>
-                <Label htmlFor="quantity-sell">Quantity</Label>
+                <div className="flex justify-between items-center mb-1">
+                  <Label htmlFor="quantity-sell">Quantity</Label>
+                  <Button type="button" variant="ghost" size="sm" className="h-6 text-xs" onClick={handleSetMaxQuantity}>
+                    Max
+                  </Button>
+                </div>
                 <Input 
                   id="quantity-sell" 
                   placeholder="0.00" 
                   value={quantity} 
-                  onChange={handleQuantityChange} 
-                  className="mt-1" 
+                  onChange={handleQuantityChange}
                 />
               </div>
 
@@ -224,12 +333,16 @@ const MarketOrder = ({ symbol, currentPrice, onPlaceOrder }: MarketOrderProps) =
                 </div>
               )}
 
-              <div>
+              <div className="rounded border border-border/40 p-3 bg-secondary/5">
                 <div className="flex justify-between text-sm text-muted-foreground mb-1">
                   <span>Current Price</span>
                   <span>{formatPrice(currentPrice)}</span>
                 </div>
                 <div className="flex justify-between text-sm text-muted-foreground mb-1">
+                  <span>{positionType === 'long' ? 'Available Holdings' : 'Available Balance'}</span>
+                  <span>{positionType === 'long' ? `${maxSellQuantity.toFixed(4)} ${symbol}` : formatPrice(userBalance)}</span>
+                </div>
+                <div className="flex justify-between text-sm font-medium mb-1">
                   <span>Order Total</span>
                   <span>{formatPrice(orderTotal || 0)}</span>
                 </div>
@@ -237,8 +350,16 @@ const MarketOrder = ({ symbol, currentPrice, onPlaceOrder }: MarketOrderProps) =
 
               <Button 
                 type="submit" 
-                className="w-full bg-destructive hover:bg-destructive/90 text-destructive-foreground"
-                disabled={isSubmitting}
+                className={`w-full ${
+                  positionType === 'long'
+                  ? 'bg-destructive hover:bg-destructive/90 text-destructive-foreground'
+                  : 'bg-orange-600 hover:bg-orange-700 text-white'
+                }`}
+                disabled={
+                  isSubmitting || 
+                  !quantity || 
+                  (positionType === 'long' && Number(quantity) > maxSellQuantity)
+                }
               >
                 {isSubmitting ? (
                   <>
@@ -246,7 +367,7 @@ const MarketOrder = ({ symbol, currentPrice, onPlaceOrder }: MarketOrderProps) =
                     Processing...
                   </>
                 ) : (
-                  `Sell ${symbol}`
+                  `${positionType === 'long' ? 'Sell' : 'Short'} ${symbol}`
                 )}
               </Button>
             </div>

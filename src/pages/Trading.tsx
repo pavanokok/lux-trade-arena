@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Trade } from "@/types/trade";
+import { supabase } from "@/integrations/supabase/client";
 
 const AVAILABLE_ASSETS = [
   { id: "bitcoin", symbol: "BTC", name: "Bitcoin", type: "crypto" },
@@ -20,6 +22,15 @@ const AVAILABLE_ASSETS = [
   { id: "cardano", symbol: "ADA", name: "Cardano", type: "crypto" },
   { id: "ripple", symbol: "XRP", name: "XRP", type: "crypto" },
   { id: "polkadot", symbol: "DOT", name: "Polkadot", type: "crypto" },
+  { id: "tesla", symbol: "TSLA", name: "Tesla", type: "stock" },
+  { id: "apple", symbol: "AAPL", name: "Apple", type: "stock" },
+  { id: "microsoft", symbol: "MSFT", name: "Microsoft", type: "stock" },
+  { id: "tcs", symbol: "TCS", name: "Tata Consultancy Services", type: "stock" },
+  { id: "infosys", symbol: "INFY", name: "Infosys", type: "stock" },
+  { id: "hsbc", symbol: "HSBC", name: "HSBC Holdings", type: "stock" },
+  { id: "bp", symbol: "BP", name: "BP plc", type: "stock" },
+  { id: "sony", symbol: "SONY", name: "Sony Group", type: "stock" },
+  { id: "toyota", symbol: "TM", name: "Toyota Motor", type: "stock" },
 ];
 
 const Trading = () => {
@@ -41,6 +52,8 @@ const Trading = () => {
   const [chartData, setChartData] = useState<CandleData[]>([]);
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<Trade[]>([]);
+  const [userBalance, setUserBalance] = useState<number>(10000); // Default starting balance
+  const [userPositions, setUserPositions] = useState<any[]>([]);
   
   // Search functionality
   const [searchQuery, setSearchQuery] = useState("");
@@ -51,6 +64,92 @@ const Trading = () => {
   useEffect(() => {
     navigate(`/trading?symbol=${selectedAsset.symbol}&id=${selectedAsset.id}`, { replace: true });
   }, [selectedAsset, navigate]);
+
+  // Check if user is logged in and get their balance
+  useEffect(() => {
+    const checkUserAndFetchData = async () => {
+      const { data } = await supabase.auth.getSession();
+      
+      if (data.session?.user) {
+        // Fetch user's balance
+        const { data: userData, error } = await supabase
+          .from('users')
+          .select('virtual_balance')
+          .eq('id', data.session.user.id)
+          .single();
+          
+        if (error) {
+          console.error("Error fetching user balance:", error);
+        } else if (userData) {
+          setUserBalance(userData.virtual_balance || 10000);
+        }
+        
+        // Fetch user's trades
+        const { data: trades, error: tradesError } = await supabase
+          .from('trades')
+          .select('*')
+          .eq('user_id', data.session.user.id)
+          .order('created_at', { ascending: false });
+          
+        if (tradesError) {
+          console.error("Error fetching trades:", tradesError);
+        } else if (trades) {
+          setOrders(trades as Trade[]);
+          
+          // Calculate positions based on trades
+          calculatePositions(trades as Trade[]);
+        }
+      } else {
+        toast.error("Please log in to access full trading features");
+        // Still allow demo trading without login
+      }
+    };
+    
+    checkUserAndFetchData();
+  }, []);
+
+  // Calculate user positions from trades
+  const calculatePositions = (trades: Trade[]) => {
+    const positions: Record<string, any> = {};
+    
+    trades.forEach(trade => {
+      if (!positions[trade.symbol]) {
+        positions[trade.symbol] = {
+          symbol: trade.symbol,
+          quantity: 0,
+          totalCost: 0,
+          type: 'long'
+        };
+      }
+      
+      const position = positions[trade.symbol];
+      
+      switch(trade.type) {
+        case 'buy':
+          position.quantity += trade.quantity;
+          position.totalCost += trade.total;
+          position.type = 'long';
+          break;
+        case 'sell':
+          position.quantity -= trade.quantity;
+          position.totalCost -= (position.totalCost / (position.quantity + trade.quantity)) * trade.quantity;
+          break;
+        case 'short':
+          position.quantity -= trade.quantity; // Negative for shorts
+          position.totalCost -= trade.total; // Credit for shorts
+          position.type = 'short';
+          break;
+        case 'cover':
+          position.quantity += trade.quantity;
+          position.totalCost += trade.total;
+          break;
+      }
+    });
+    
+    // Filter out closed positions (quantity = 0)
+    const activePositions = Object.values(positions).filter((position: any) => position.quantity !== 0);
+    setUserPositions(activePositions);
+  };
 
   // Fetch market data when selected asset changes
   useEffect(() => {
@@ -116,22 +215,64 @@ const Trading = () => {
   }, [searchQuery]);
 
   // Handle order placement
-  const handlePlaceOrder = (order: Trade) => {
-    // Create an enriched order object for display purposes
-    const displayOrder = {
-      ...order,
-      timestamp: new Date() // Add timestamp for display purposes
-    };
+  const handlePlaceOrder = async (order: Trade) => {
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData.session) {
+      toast.error("Please log in to place orders");
+      navigate("/login");
+      return;
+    }
     
-    setOrders((prev) => [displayOrder, ...prev]);
+    // Check if user has enough balance for buy orders
+    if ((order.type === 'buy' || order.type === 'cover') && order.total > userBalance) {
+      toast.error(`Insufficient funds. You need $${order.total.toFixed(2)} but have $${userBalance.toFixed(2)}`);
+      return;
+    }
+    
+    // For sell orders, check if user has the assets (for long positions)
+    if (order.type === 'sell') {
+      const position = userPositions.find(p => p.symbol === order.symbol && p.type === 'long');
+      if (!position || position.quantity < order.quantity) {
+        toast.error(`You don't have enough ${order.symbol} to sell`);
+        return;
+      }
+    }
+    
+    setOrders((prev) => [order, ...prev]);
+    
+    // Update user balance
+    let newBalance = userBalance;
+    if (order.type === 'buy' || order.type === 'cover') {
+      newBalance -= order.total;
+    } else if (order.type === 'sell' || order.type === 'short') {
+      newBalance += order.total;
+    }
+    
+    // Update the balance in Supabase
+    const { error: balanceError } = await supabase
+      .from('users')
+      .update({ virtual_balance: newBalance })
+      .eq('id', sessionData.session.user.id);
+      
+    if (balanceError) {
+      console.error('Error updating balance:', balanceError);
+      toast.error('Error updating your balance');
+      return;
+    }
+    
+    setUserBalance(newBalance);
     
     // Show success notification
     toast.success(
-      `${order.type === 'buy' ? 'Bought' : 'Sold'} ${order.quantity} ${order.symbol} at $${order.price.toFixed(2)}`,
+      `${order.type === 'buy' ? 'Bought' : order.type === 'sell' ? 'Sold' : 
+        order.type === 'short' ? 'Shorted' : 'Covered'} ${order.quantity} ${order.symbol} at $${order.price.toFixed(2)}`,
       {
         description: `Total: $${order.total.toFixed(2)}`
       }
     );
+    
+    // Recalculate positions
+    calculatePositions([...orders, order]);
   };
 
   // Manual refresh of data
@@ -168,7 +309,6 @@ const Trading = () => {
             />
             <Search className="absolute top-2.5 right-2.5 h-4 w-4 text-muted-foreground" />
             
-            {/* Search results dropdown */}
             {searchResults.length > 0 && searchQuery.length >= 2 && (
               <Card className="absolute top-full left-0 right-0 mt-1 p-2 max-h-60 overflow-auto z-50">
                 <ul>
@@ -270,6 +410,75 @@ const Trading = () => {
             )}
           </div>
           
+          {/* Sidebar layout rearrangement - Move Market Order up in mobile view */}
+          <div className="block lg:hidden">
+            {/* Order form */}
+            <MarketOrder 
+              symbol={selectedAsset.symbol} 
+              currentPrice={marketData?.price || 0}
+              userBalance={userBalance}
+              userPositions={userPositions}
+              onPlaceOrder={handlePlaceOrder}
+            />
+          </div>
+          
+          {/* Trading positions */}
+          {userPositions.length > 0 && (
+            <div className="rounded-lg border border-border/40 bg-secondary/10 p-4">
+              <h3 className="text-lg font-medium mb-4">Open Positions</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border/40">
+                      <th className="text-left py-2 font-medium">Symbol</th>
+                      <th className="text-left py-2 font-medium">Type</th>
+                      <th className="text-right py-2 font-medium">Quantity</th>
+                      <th className="text-right py-2 font-medium">Avg. Price</th>
+                      <th className="text-right py-2 font-medium">Current Price</th>
+                      <th className="text-right py-2 font-medium">P&L</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {userPositions.map((position, index) => {
+                      // Get current price from market data or use last known price
+                      const currentPrice = (selectedAsset.symbol === position.symbol && marketData?.price) 
+                        ? marketData.price 
+                        : position.currentPrice || 0;
+                      
+                      // Calculate P&L based on position type (long/short)
+                      const avgPrice = position.totalCost / Math.abs(position.quantity);
+                      const isLong = position.type === 'long';
+                      const pnl = isLong 
+                        ? (currentPrice - avgPrice) * position.quantity
+                        : (avgPrice - currentPrice) * Math.abs(position.quantity);
+                      
+                      return (
+                        <tr key={index} className="border-b border-border/20 hover:bg-secondary/5">
+                          <td className="py-2">{position.symbol}</td>
+                          <td className={`py-2 ${isLong ? 'text-success' : 'text-destructive'}`}>
+                            {isLong ? 'Long' : 'Short'}
+                          </td>
+                          <td className="py-2 text-right font-mono">
+                            {Math.abs(position.quantity).toFixed(4)}
+                          </td>
+                          <td className="py-2 text-right font-mono">
+                            ${avgPrice.toFixed(2)}
+                          </td>
+                          <td className="py-2 text-right font-mono">
+                            ${currentPrice.toFixed(2)}
+                          </td>
+                          <td className={`py-2 text-right font-mono ${pnl >= 0 ? 'text-success' : 'text-destructive'}`}>
+                            ${pnl.toFixed(2)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          
           {/* Order book */}
           <OrderBook 
             symbol={selectedAsset.symbol} 
@@ -295,8 +504,14 @@ const Trading = () => {
                   <tbody>
                     {orders.map((order, index) => (
                       <tr key={index} className="border-b border-border/20 hover:bg-secondary/5">
-                        <td className={`py-2 ${order.type === 'buy' ? 'text-success' : 'text-destructive'}`}>
-                          {order.type === 'buy' ? 'Buy' : 'Sell'} ({order.order_type})
+                        <td className={`py-2 ${
+                          order.type === 'buy' ? 'text-success' : 
+                          order.type === 'sell' ? 'text-destructive' :
+                          order.type === 'short' ? 'text-destructive' : 'text-success'
+                        }`}>
+                          {order.type === 'buy' ? 'Buy' : 
+                           order.type === 'sell' ? 'Sell' :
+                           order.type === 'short' ? 'Short' : 'Cover'} ({order.order_type})
                         </td>
                         <td className="py-2">{order.symbol}</td>
                         <td className="py-2 text-right font-mono">
@@ -322,17 +537,27 @@ const Trading = () => {
         
         {/* Sidebar - right side (1 column) */}
         <div className="space-y-6">
+          {/* Available balance */}
+          <div className="rounded-lg border border-border/40 bg-secondary/10 p-6">
+            <h3 className="text-lg font-medium mb-2">Available Balance</h3>
+            <p className="text-3xl font-mono font-bold">${userBalance.toFixed(2)}</p>
+          </div>
+          
           {/* Market info card */}
           <div className="rounded-lg border border-border/40 bg-secondary/10">
             <MarketInfo data={marketData} loading={loading} />
           </div>
           
-          {/* Order form */}
-          <MarketOrder 
-            symbol={selectedAsset.symbol} 
-            currentPrice={marketData?.price || 0} 
-            onPlaceOrder={handlePlaceOrder}
-          />
+          {/* Order form - hide in mobile view as it's moved up */}
+          <div className="hidden lg:block">
+            <MarketOrder 
+              symbol={selectedAsset.symbol} 
+              currentPrice={marketData?.price || 0}
+              userBalance={userBalance}
+              userPositions={userPositions}
+              onPlaceOrder={handlePlaceOrder}
+            />
+          </div>
         </div>
       </div>
     </div>

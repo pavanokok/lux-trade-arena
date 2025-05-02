@@ -6,7 +6,21 @@ export interface Trade {
   quantity: number;
   price: number;
   total: number;
-  type: 'buy' | 'sell';
+  type: 'buy' | 'sell' | 'short' | 'cover';
   order_type: 'market' | 'limit';
   created_at: string;
+  position_type?: 'long' | 'short'; // For displaying position type
+}
+
+// Interface for portfolio positions
+export interface Position {
+  symbol: string;
+  name: string;
+  quantity: number;
+  avgBuyPrice: number;
+  currentPrice: number;
+  totalValue: number;
+  pnl: number;
+  pnlPercent: number;
+  type: 'long' | 'short';
 }
