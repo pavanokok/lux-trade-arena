@@ -1,4 +1,6 @@
 
+import { AssetType } from "@/utils/marketData";
+
 export interface Trade {
   id: string;
   user_id: string;
@@ -23,4 +25,5 @@ export interface Position {
   pnl: number;
   pnlPercent: number;
   type: 'long' | 'short';
+  assetType?: AssetType; // Crypto or Stock
 }

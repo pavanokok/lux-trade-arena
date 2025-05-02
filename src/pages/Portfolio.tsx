@@ -2,8 +2,14 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowUp, ArrowDown, RefreshCcw, Loader2 } from "lucide-react";
-import { formatPrice, formatPercentage, getAssetCurrentPrice } from "@/utils/marketData";
+import { ArrowUp, ArrowDown, RefreshCcw, Loader2, AlertCircle } from "lucide-react";
+import { 
+  formatPrice, 
+  formatPercentage, 
+  getAssetCurrentPrice, 
+  getAssetInfo,
+  AssetType
+} from "@/utils/marketData";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
@@ -57,9 +63,11 @@ const Portfolio = () => {
         const positions = await processTradesIntoPositions(trades as Trade[]);
         setPositions(positions);
         
-        // Calculate portfolio totals
-        const totalVal = positions.reduce((sum, pos) => sum + pos.totalValue, 0);
-        const totalCost = positions.reduce((sum, pos) => {
+        // Calculate portfolio totals - only include positions with valid currentPrice
+        const validPositions = positions.filter(pos => pos.currentPrice !== null);
+        const totalVal = validPositions.reduce((sum, pos) => sum + pos.totalValue, 0);
+        
+        const totalCost = validPositions.reduce((sum, pos) => {
           if (pos.type === 'long') {
             return sum + (pos.avgBuyPrice * pos.quantity);
           } else {
@@ -68,7 +76,7 @@ const Portfolio = () => {
           }
         }, 0);
         
-        const totalPnlVal = positions.reduce((sum, pos) => sum + pos.pnl, 0);
+        const totalPnlVal = validPositions.reduce((sum, pos) => sum + pos.pnl, 0);
         const totalPnlPercentVal = totalCost > 0 ? (totalPnlVal / totalCost) * 100 : 0;
         
         setTotalValue(totalVal);
@@ -89,7 +97,8 @@ const Portfolio = () => {
       name: string,
       quantity: number, 
       totalCost: number,
-      type: 'long' | 'short'
+      type: 'long' | 'short',
+      assetType: AssetType
     }>();
     
     // Process trades to build positions
@@ -97,13 +106,19 @@ const Portfolio = () => {
       const symbol = trade.symbol;
       const mapKey = `${symbol}-${trade.type === 'buy' || trade.type === 'cover' ? 'long' : 'short'}`;
       
+      // Get asset info including name and type
+      const assetInfo = getAssetInfo(symbol);
+      const assetName = assetInfo?.name || symbol;
+      const assetType = assetInfo?.type || AssetType.CRYPTO;
+      
       if (!posMap.has(mapKey)) {
         posMap.set(mapKey, {
           symbol,
-          name: symbol, // We'll update this if we get more info
+          name: assetName,
           quantity: 0,
           totalCost: 0,
-          type: trade.type === 'buy' || trade.type === 'cover' ? 'long' : 'short'
+          type: trade.type === 'buy' || trade.type === 'cover' ? 'long' : 'short',
+          assetType
         });
       }
       
@@ -174,7 +189,8 @@ const Portfolio = () => {
         totalValue,
         pnl,
         pnlPercent,
-        type: position.type
+        type: position.type,
+        assetType: position.assetType
       });
     }
     
@@ -316,20 +332,29 @@ const Portfolio = () => {
                         {formatPrice(position.avgBuyPrice)}
                       </td>
                       <td className="text-right py-3 font-mono">
-                        {position.currentPrice !== null ? formatPrice(position.currentPrice) : 'Price Unavailable'}
+                        {position.currentPrice !== null ? (
+                          formatPrice(position.currentPrice)
+                        ) : (
+                          <div className="flex items-center justify-end text-amber-500">
+                            <AlertCircle className="h-3 w-3 mr-1" />
+                            <span>Live price unavailable</span>
+                          </div>
+                        )}
                       </td>
                       <td className="text-right py-3 font-mono">
-                        {formatPrice(position.totalValue)}
+                        {position.currentPrice !== null ? formatPrice(position.totalValue) : 'Not calculated'}
                       </td>
                       <td className={`text-right py-3 ${position.pnl >= 0 ? 'text-success' : 'text-destructive'}`}>
-                        <div className="flex items-center justify-end">
-                          {position.pnl >= 0 ? (
-                            <ArrowUp className="h-3 w-3 mr-1" />
-                          ) : (
-                            <ArrowDown className="h-3 w-3 mr-1" />
-                          )}
-                          {formatPrice(position.pnl)} ({formatPercentage(position.pnlPercent)})
-                        </div>
+                        {position.currentPrice !== null ? (
+                          <div className="flex items-center justify-end">
+                            {position.pnl >= 0 ? (
+                              <ArrowUp className="h-3 w-3 mr-1" />
+                            ) : (
+                              <ArrowDown className="h-3 w-3 mr-1" />
+                            )}
+                            {formatPrice(position.pnl)} ({formatPercentage(position.pnlPercent)})
+                          </div>
+                        ) : 'Not calculated'}
                       </td>
                     </tr>
                   ))}

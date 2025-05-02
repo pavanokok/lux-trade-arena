@@ -1,7 +1,7 @@
 
 import { useRef, useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, Loader2 } from "lucide-react";
-import { getAssetCurrentPrice, formatPrice } from "@/utils/marketData";
+import { getAssetCurrentPrice, formatPrice, defaultCryptoAssets, defaultStockAssets } from "@/utils/marketData";
 import { toast } from "sonner";
 
 interface Ticker {
@@ -14,16 +14,20 @@ interface Ticker {
 
 // List of tickers to display in the banner
 const initialTickers: Ticker[] = [
-  { symbol: "BTC", name: "Bitcoin", price: null, change: 0, isLoading: true },
-  { symbol: "ETH", name: "Ethereum", price: null, change: 0, isLoading: true },
-  { symbol: "SOL", name: "Solana", price: null, change: 0, isLoading: true },
-  { symbol: "DOGE", name: "Dogecoin", price: null, change: 0, isLoading: true },
-  { symbol: "MATIC", name: "Polygon", price: null, change: 0, isLoading: true },
-  { symbol: "ADA", name: "Cardano", price: null, change: 0, isLoading: true },
-  { symbol: "XRP", name: "Ripple", price: null, change: 0, isLoading: true },
-  { symbol: "DOT", name: "Polkadot", price: null, change: 0, isLoading: true },
-  { symbol: "AVAX", name: "Avalanche", price: null, change: 0, isLoading: true },
-  { symbol: "LINK", name: "Chainlink", price: null, change: 0, isLoading: true },
+  ...defaultCryptoAssets.slice(0, 6).map(asset => ({
+    symbol: asset.symbol,
+    name: asset.name,
+    price: null,
+    change: 0,
+    isLoading: true
+  })),
+  ...defaultStockAssets.slice(0, 4).map(asset => ({
+    symbol: asset.symbol,
+    name: asset.name,
+    price: null,
+    change: 0,
+    isLoading: true
+  }))
 ];
 
 const PriceTickerBanner = () => {
@@ -50,8 +54,11 @@ const PriceTickerBanner = () => {
                 if (prevPrice) {
                   change = ((price - parseFloat(prevPrice)) / parseFloat(prevPrice)) * 100;
                 } else {
-                  // If no previous price, generate a random change between -5 and +5
-                  change = (Math.random() * 10) - 5;
+                  // If no previous price, generate a realistic change between -5 and +5
+                  const defaultAsset = [...defaultCryptoAssets, ...defaultStockAssets].find(
+                    asset => asset.symbol.toLowerCase() === ticker.symbol.toLowerCase()
+                  );
+                  change = defaultAsset?.change || (Math.random() * 10) - 5;
                 }
                 // Store current price as previous for next time
                 localStorage.setItem(`prev_price_${ticker.symbol.toLowerCase()}`, price.toString());

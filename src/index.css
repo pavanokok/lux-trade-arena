@@ -9,37 +9,35 @@
     --foreground: 213 31% 91%;
 
     --muted: 223 47% 11%;
-    --muted-foreground: 215.4 16.3% 56.9%;
-
+    --muted-foreground: 215 20.2% 65.1%;
+    
+    --accent: 116 79% 63%;
+    --accent-foreground: 210 40% 98%;
+    
     --popover: 224 71% 4%;
     --popover-foreground: 215 20.2% 65.1%;
-
+    
     --card: 224 71% 4%;
     --card-foreground: 213 31% 91%;
-
+    
     --border: 216 34% 17%;
     --input: 216 34% 17%;
-
+    
     --primary: 210 40% 98%;
     --primary-foreground: 222.2 47.4% 1.2%;
-
+    
     --secondary: 222.2 47.4% 11.2%;
     --secondary-foreground: 210 40% 98%;
-
-    --accent: 175 84% 32%;
-    --accent-foreground: 210 40% 98%;
-
-    --success: 142.1 70.6% 45.3%;
-    --success-foreground: 144.9 80.4% 10%;
-
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-
-    --ring: 216 34% 17%;
-    --radius: 0.5rem;
     
-    --danger: 0 84.2% 60.2%;
-    --danger-foreground: 210 40% 98%;
+    --destructive: 0 63% 61%;
+    --destructive-foreground: 210 40% 98%;
+    
+    --success: 142 70% 49%;
+    --success-foreground: 210 40% 98%;
+    
+    --ring: 216 34% 17%;
+    
+    --radius: 0.5rem;
   }
 }
 
@@ -47,42 +45,38 @@
   * {
     @apply border-border;
   }
+  
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
 
-/* Ticker animation */
-@keyframes ticker {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(-50%);
+@layer components {
+  .shadow-glow {
+    box-shadow: 0 0 15px 5px rgba(74, 222, 128, 0.15);
   }
 }
 
-.animate-ticker {
-  animation: ticker 45s linear infinite;
-}
-
-.ticker-item {
-  padding: 0 1rem;
-}
-
-/* Button glow effect */
-.shadow-glow {
-  box-shadow: 0 0 20px rgba(16, 185, 129, 0.7);
-}
-
-/* Fonts */
-.font-display {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  letter-spacing: -0.025em;
-}
-
-/* For charts and graphs */
-svg.recharts-surface {
-  overflow: visible;
+@layer utilities {
+  /* Ticker animation */
+  .ticker-item {
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 1rem;
+  }
+  
+  @keyframes ticker {
+    0% {
+      transform: translateX(0);
+    }
+    100% {
+      transform: translateX(-50%);
+    }
+  }
+  
+  .animate-ticker {
+    animation: ticker 60s linear infinite;
+  }
 }
