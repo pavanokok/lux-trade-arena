@@ -1,8 +1,15 @@
-
 import { useRef, useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, Loader2 } from "lucide-react";
-import { getAssetCurrentPrice, formatPrice, defaultCryptoAssets, defaultStockAssets } from "@/utils/marketData";
+import { 
+  getAssetCurrentPrice, 
+  formatPrice, 
+  defaultCryptoAssets, 
+  defaultStockAssets, 
+  AssetType,
+  formatPercentage
+} from "@/utils/marketData";
 import { toast } from "sonner";
+import axios from "axios";
 
 interface Ticker {
   symbol: string;
@@ -39,30 +46,44 @@ const PriceTickerBanner = () => {
   useEffect(() => {
     const fetchPrices = async () => {
       try {
+        // Try to fetch real crypto data first
+        let cryptoData: any[] = [];
+        try {
+          const response = await axios.get(
+            "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=10&page=1&sparkline=false&price_change_percentage=24h"
+          );
+          
+          cryptoData = response.data;
+        } catch (error) {
+          console.error("Error fetching live crypto data:", error);
+        }
+
         const updatedTickers = await Promise.all(
           tickers.map(async (ticker) => {
             try {
-              // Attempt to get current price
+              // First check if we have real-time data from the API
+              const liveCrypto = cryptoData.find(
+                coin => coin.symbol.toUpperCase() === ticker.symbol.toUpperCase()
+              );
+              
+              if (liveCrypto) {
+                // Use real API data when available
+                return {
+                  ...ticker,
+                  price: liveCrypto.current_price,
+                  change: liveCrypto.price_change_percentage_24h,
+                  isLoading: false
+                };
+              }
+              
+              // Otherwise try to get current price from our standard method
               const price = await getAssetCurrentPrice(ticker.symbol.toLowerCase());
               
-              // Simulate change value calculation (in a real app, this would come from the API)
-              // Here we're using a simplified approach with random changes
-              const prevPrice = localStorage.getItem(`prev_price_${ticker.symbol.toLowerCase()}`);
-              let change = ticker.change;
-              
-              if (price !== null) {
-                if (prevPrice) {
-                  change = ((price - parseFloat(prevPrice)) / parseFloat(prevPrice)) * 100;
-                } else {
-                  // If no previous price, generate a realistic change between -5 and +5
-                  const defaultAsset = [...defaultCryptoAssets, ...defaultStockAssets].find(
-                    asset => asset.symbol.toLowerCase() === ticker.symbol.toLowerCase()
-                  );
-                  change = defaultAsset?.change || (Math.random() * 10) - 5;
-                }
-                // Store current price as previous for next time
-                localStorage.setItem(`prev_price_${ticker.symbol.toLowerCase()}`, price.toString());
-              }
+              // Use consistent default values for change as a fallback
+              const defaultAsset = [...defaultCryptoAssets, ...defaultStockAssets].find(
+                asset => asset.symbol.toLowerCase() === ticker.symbol.toLowerCase()
+              );
+              const change = defaultAsset?.change || 0;
               
               return {
                 ...ticker,
@@ -165,7 +186,7 @@ const PriceTickerBanner = () => {
             </span>
             <span className={`flex items-center ${ticker.change >= 0 ? 'text-success' : 'text-destructive'}`}>
               {ticker.change >= 0 ? <ArrowUp className="h-3 w-3 mr-1" /> : <ArrowDown className="h-3 w-3 mr-1" />}
-              {Math.abs(ticker.change).toFixed(2)}%
+              {formatPercentage(ticker.change)}
             </span>
           </div>
         ))}

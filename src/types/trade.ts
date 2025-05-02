@@ -25,5 +25,5 @@ export interface Position {
   pnl: number;
   pnlPercent: number;
   type: 'long' | 'short';
-  assetType?: AssetType; // Crypto or Stock
+  assetType: AssetType; // Crypto or Stock
 }

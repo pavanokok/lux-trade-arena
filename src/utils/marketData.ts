@@ -211,19 +211,11 @@ export const defaultStockAssets: AssetData[] = [
 ];
 
 // Map of all default assets for quick lookups
-interface DefaultAssetMapEntry {
-  id: string;
-  name: string;
-  symbol: string;
-  price: number;
-  change: number;
-  volume: string;
-  marketCap: string;
-  chart: number[];
+interface DefaultAssetMapEntry extends AssetData {
   type: AssetType;
 }
 
-// Fix the map construction to properly type the entries
+// Initialize the map correctly
 const defaultAssetMap = new Map<string, DefaultAssetMapEntry>();
 
 // Add crypto assets to the map
