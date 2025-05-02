@@ -1,4 +1,3 @@
-
 import axios from "axios";
 import { Time } from "lightweight-charts";
 import { toast } from "sonner";
@@ -30,8 +29,21 @@ export enum AssetType {
   STOCK = "stock"
 }
 
+// Interface for asset data
+export interface AssetData {
+  id: string; 
+  name: string; 
+  symbol: string; 
+  price: number; 
+  change: number; 
+  volume: string;
+  marketCap: string;
+  chart: number[];
+  type?: AssetType;
+}
+
 // Default data as fallback if API fails
-export const defaultCryptoAssets = [
+export const defaultCryptoAssets: AssetData[] = [
   { 
     id: "btc", 
     name: "Bitcoin", 
@@ -144,7 +156,7 @@ export const defaultCryptoAssets = [
   }
 ];
 
-export const defaultStockAssets = [
+export const defaultStockAssets: AssetData[] = [
   { 
     id: "aapl", 
     name: "Apple Inc.", 
@@ -198,10 +210,30 @@ export const defaultStockAssets = [
 ];
 
 // Map of all default assets for quick lookups
-const defaultAssetMap = new Map([
-  ...defaultCryptoAssets.map(asset => [`${asset.symbol.toLowerCase()}`, { ...asset, type: AssetType.CRYPTO }]),
-  ...defaultStockAssets.map(asset => [`${asset.symbol.toLowerCase()}`, { ...asset, type: AssetType.STOCK }])
-]);
+interface DefaultAssetMapEntry {
+  id: string;
+  name: string;
+  symbol: string;
+  price: number;
+  change: number;
+  volume: string;
+  marketCap: string;
+  chart: number[];
+  type: AssetType;
+}
+
+const defaultAssetMap = new Map<string, DefaultAssetMapEntry>(
+  [
+    ...defaultCryptoAssets.map(asset => [
+      asset.symbol.toLowerCase(), 
+      { ...asset, type: AssetType.CRYPTO }
+    ]),
+    ...defaultStockAssets.map(asset => [
+      asset.symbol.toLowerCase(), 
+      { ...asset, type: AssetType.STOCK }
+    ])
+  ]
+);
 
 // Fetch crypto data from CoinGecko
 export async function fetchCryptoData(coinId: string): Promise<MarketData | null> {
