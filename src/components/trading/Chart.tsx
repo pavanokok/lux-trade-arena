@@ -1,6 +1,6 @@
 
 import { useRef, useEffect, useState } from 'react';
-import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeriesOptions, Time } from 'lightweight-charts';
+import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeriesOptions, Time, LineData } from 'lightweight-charts';
 import { CandleData } from '@/utils/marketData';
 import { Trade } from '@/types/trade';
 import TradeMarker from './TradeMarker';
@@ -12,12 +12,14 @@ interface ChartProps {
   darkMode?: boolean;
   symbol: string;
   trades?: Trade[];
+  livePrice?: number;
 }
 
-const Chart = ({ data, width = '100%', height = 400, darkMode = true, symbol, trades = [] }: ChartProps) => {
+const Chart = ({ data, width = '100%', height = 400, darkMode = true, symbol, trades = [], livePrice }: ChartProps) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const [chart, setChart] = useState<IChartApi | null>(null);
   const [series, setSeries] = useState<ISeriesApi<"Candlestick"> | null>(null);
+  const [lineSeries, setLineSeries] = useState<ISeriesApi<"Line"> | null>(null);
   const [chartDimensions, setChartDimensions] = useState({ width: 0, height: 0 });
   const [visibleRange, setVisibleRange] = useState({ minTime: 0, maxTime: 0, minPrice: 0, maxPrice: 0 });
 
@@ -72,9 +74,24 @@ const Chart = ({ data, width = '100%', height = 400, darkMode = true, symbol, tr
         wickUpColor: upColor,
         wickDownColor: downColor,
       });
+      
+      // Add line series for the current price
+      const newLineSeries = newChart.addLineSeries({
+        color: '#2962FF',
+        lineWidth: 2,
+        lineStyle: 0, // Solid
+        lastValueVisible: true,
+        priceLineVisible: true,
+        priceLineWidth: 1,
+        priceLineColor: '#2962FF',
+        priceLineStyle: 2, // Dashed
+        crosshairMarkerVisible: true,
+        crosshairMarkerRadius: 4,
+      });
 
       setChart(newChart);
       setSeries(newSeries);
+      setLineSeries(newLineSeries);
       setChartDimensions({ 
         width: chartContainerRef.current.clientWidth, 
         height: height as number 
@@ -127,6 +144,37 @@ const Chart = ({ data, width = '100%', height = 400, darkMode = true, symbol, tr
       }
     }
   }, [series, data, chart]);
+
+  // Update the line series with live price if available
+  useEffect(() => {
+    if (lineSeries && data.length > 0 && livePrice) {
+      // Create a line that spans across the visible chart area
+      const now = Math.floor(Date.now() / 1000);
+      const lineData: LineData[] = [];
+      
+      // If we have chart data, use its time range
+      if (data.length > 1) {
+        const firstPoint = {
+          time: data[0].time as number,
+          value: livePrice
+        };
+        const lastPoint = {
+          time: now as Time,
+          value: livePrice
+        };
+        
+        lineData.push(firstPoint, lastPoint);
+      } else {
+        // Fallback if no data
+        lineData.push({
+          time: now as Time,
+          value: livePrice
+        });
+      }
+      
+      lineSeries.setData(lineData);
+    }
+  }, [lineSeries, livePrice, data]);
 
   return (
     <div>

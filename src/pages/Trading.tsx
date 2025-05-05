@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -7,6 +6,7 @@ import Chart from "@/components/trading/Chart";
 import MarketOrder from "@/components/trading/MarketOrder";
 import MarketInfo from "@/components/trading/MarketInfo";
 import OrderBook from "@/components/trading/OrderBook";
+import ShortTermTrading from "@/components/trading/ShortTermTrading";
 import { fetchCryptoData, fetchCryptoHistoricalData, searchAssets, MarketData, CandleData } from "@/utils/marketData";
 import { Bitcoin, Search, RefreshCcw, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
@@ -46,6 +46,7 @@ const Trading = () => {
     AVAILABLE_ASSETS.find(asset => asset.id === assetId || asset.symbol === assetSymbol) || AVAILABLE_ASSETS[0]
   );
   const [timeframe, setTimeframe] = useState("7d");
+  const [tradingMode, setTradingMode] = useState("spot");
   
   // Market data states
   const [marketData, setMarketData] = useState<MarketData | null>(null);
@@ -275,6 +276,16 @@ const Trading = () => {
     calculatePositions([...orders, order]);
   };
 
+  // Handle completed short-term trade
+  const handleShortTermTradeComplete = (trade: Trade) => {
+    setOrders((prev) => [trade, ...prev]);
+  };
+
+  // Update user balance
+  const handleBalanceUpdate = (newBalance: number) => {
+    setUserBalance(newBalance);
+  };
+
   // Manual refresh of data
   const handleRefresh = async () => {
     setLoading(true);
@@ -339,6 +350,16 @@ const Trading = () => {
             {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
           </Button>
         </div>
+      </div>
+      
+      {/* Trading Mode Tabs */}
+      <div className="mb-4">
+        <Tabs value={tradingMode} onValueChange={setTradingMode} className="w-full">
+          <TabsList className="grid w-full sm:w-auto grid-cols-2">
+            <TabsTrigger value="spot">Spot Trading</TabsTrigger>
+            <TabsTrigger value="short_term">Short-Term Trading</TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
       
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -406,24 +427,36 @@ const Trading = () => {
                 data={chartData} 
                 height={400} 
                 symbol={selectedAsset.symbol} 
+                trades={orders.filter(o => o.symbol === selectedAsset.symbol)}
+                livePrice={marketData?.price} 
               />
             )}
           </div>
           
-          {/* Sidebar layout rearrangement - Move Market Order up in mobile view */}
+          {/* Sidebar layout rearrangement - Move specific trading UI up in mobile view */}
           <div className="block lg:hidden">
-            {/* Order form */}
-            <MarketOrder 
-              symbol={selectedAsset.symbol} 
-              currentPrice={marketData?.price || 0}
-              userBalance={userBalance}
-              userPositions={userPositions}
-              onPlaceOrder={handlePlaceOrder}
-            />
+            {tradingMode === "spot" ? (
+              <MarketOrder 
+                symbol={selectedAsset.symbol} 
+                currentPrice={marketData?.price || 0}
+                userBalance={userBalance}
+                userPositions={userPositions}
+                onPlaceOrder={handlePlaceOrder}
+              />
+            ) : (
+              <ShortTermTrading
+                symbol={selectedAsset.symbol}
+                currentPrice={marketData?.price || 0}
+                chartData={chartData}
+                userBalance={userBalance}
+                onTradeComplete={handleShortTermTradeComplete}
+                onBalanceUpdate={handleBalanceUpdate}
+              />
+            )}
           </div>
           
-          {/* Trading positions */}
-          {userPositions.length > 0 && (
+          {/* Trading positions - Only show in spot mode */}
+          {tradingMode === "spot" && userPositions.length > 0 && (
             <div className="rounded-lg border border-border/40 bg-secondary/10 p-4">
               <h3 className="text-lg font-medium mb-4">Open Positions</h3>
               <div className="overflow-x-auto">
@@ -479,16 +512,18 @@ const Trading = () => {
             </div>
           )}
           
-          {/* Order book */}
-          <OrderBook 
-            symbol={selectedAsset.symbol} 
-            basePrice={marketData?.price || 0} 
-          />
+          {/* Order book - Only show in spot mode */}
+          {tradingMode === "spot" && (
+            <OrderBook 
+              symbol={selectedAsset.symbol} 
+              basePrice={marketData?.price || 0} 
+            />
+          )}
           
           {/* Recent orders */}
           {orders.length > 0 && (
             <div className="rounded-lg border border-border/40 bg-secondary/10 p-4">
-              <h3 className="text-lg font-medium mb-4">Recent Orders</h3>
+              <h3 className="text-lg font-medium mb-4">Trading History</h3>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
@@ -498,36 +533,54 @@ const Trading = () => {
                       <th className="text-right py-2 font-medium">Price</th>
                       <th className="text-right py-2 font-medium">Amount</th>
                       <th className="text-right py-2 font-medium">Total</th>
+                      <th className="text-right py-2 font-medium">P/L</th>
                       <th className="text-right py-2 font-medium">Date</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {orders.map((order, index) => (
-                      <tr key={index} className="border-b border-border/20 hover:bg-secondary/5">
-                        <td className={`py-2 ${
-                          order.type === 'buy' ? 'text-success' : 
-                          order.type === 'sell' ? 'text-destructive' :
-                          order.type === 'short' ? 'text-destructive' : 'text-success'
-                        }`}>
-                          {order.type === 'buy' ? 'Buy' : 
-                           order.type === 'sell' ? 'Sell' :
-                           order.type === 'short' ? 'Short' : 'Cover'} ({order.order_type})
-                        </td>
-                        <td className="py-2">{order.symbol}</td>
-                        <td className="py-2 text-right font-mono">
-                          ${order.price.toFixed(2)}
-                        </td>
-                        <td className="py-2 text-right font-mono">
-                          {order.quantity.toFixed(4)}
-                        </td>
-                        <td className="py-2 text-right font-mono">
-                          ${order.total.toFixed(2)}
-                        </td>
-                        <td className="py-2 text-right">
-                          {new Date(order.created_at).toLocaleTimeString()}
-                        </td>
-                      </tr>
-                    ))}
+                    {orders.map((order, index) => {
+                      // Determine if this is a short-term trade
+                      const isShortTerm = order.type === 'short_term_up' || order.type === 'short_term_down';
+                      const isWin = order.result === 'win';
+                      
+                      return (
+                        <tr key={index} className="border-b border-border/20 hover:bg-secondary/5">
+                          <td className={`py-2 ${
+                            order.type === 'buy' || order.type === 'short_term_up' ? 'text-success' : 
+                            order.type === 'sell' || order.type === 'short_term_down' ? 'text-destructive' :
+                            order.type === 'short' ? 'text-destructive' : 'text-success'
+                          }`}>
+                            {isShortTerm ? (
+                              `${order.type === 'short_term_up' ? 'UP' : 'DOWN'}`
+                            ) : (
+                              `${order.type === 'buy' ? 'Buy' : 
+                                order.type === 'sell' ? 'Sell' :
+                                order.type === 'short' ? 'Short' : 'Cover'} (${order.order_type})`
+                            )}
+                          </td>
+                          <td className="py-2">{order.symbol}</td>
+                          <td className="py-2 text-right font-mono">
+                            ${order.price.toFixed(2)}
+                          </td>
+                          <td className="py-2 text-right font-mono">
+                            {isShortTerm ? '$' + order.total.toFixed(2) : order.quantity.toFixed(4)}
+                          </td>
+                          <td className="py-2 text-right font-mono">
+                            ${order.total.toFixed(2)}
+                          </td>
+                          <td className="py-2 text-right font-mono">
+                            {order.realized_pnl !== undefined && order.realized_pnl !== null ? (
+                              <span className={order.realized_pnl >= 0 ? 'text-success' : 'text-destructive'}>
+                                {order.realized_pnl >= 0 ? '+' : ''}{order.realized_pnl.toFixed(2)}
+                              </span>
+                            ) : '-'}
+                          </td>
+                          <td className="py-2 text-right">
+                            {new Date(order.created_at).toLocaleTimeString()}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -550,13 +603,24 @@ const Trading = () => {
           
           {/* Order form - hide in mobile view as it's moved up */}
           <div className="hidden lg:block">
-            <MarketOrder 
-              symbol={selectedAsset.symbol} 
-              currentPrice={marketData?.price || 0}
-              userBalance={userBalance}
-              userPositions={userPositions}
-              onPlaceOrder={handlePlaceOrder}
-            />
+            {tradingMode === "spot" ? (
+              <MarketOrder 
+                symbol={selectedAsset.symbol} 
+                currentPrice={marketData?.price || 0}
+                userBalance={userBalance}
+                userPositions={userPositions}
+                onPlaceOrder={handlePlaceOrder}
+              />
+            ) : (
+              <ShortTermTrading
+                symbol={selectedAsset.symbol}
+                currentPrice={marketData?.price || 0}
+                chartData={chartData}
+                userBalance={userBalance}
+                onTradeComplete={handleShortTermTradeComplete}
+                onBalanceUpdate={handleBalanceUpdate}
+              />
+            )}
           </div>
         </div>
       </div>

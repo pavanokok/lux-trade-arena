@@ -8,8 +8,8 @@ export interface Trade {
   quantity: number;
   price: number;
   total: number;
-  type: 'buy' | 'sell' | 'short' | 'cover';
-  order_type: 'market' | 'limit';
+  type: 'buy' | 'sell' | 'short' | 'cover' | 'short_term_up' | 'short_term_down';
+  order_type: 'market' | 'limit' | 'short_term';
   created_at: string;
   position_type?: 'long' | 'short'; // For displaying position type
   entry_timestamp?: string;
@@ -19,6 +19,8 @@ export interface Trade {
   is_closed?: boolean;
   close_type?: 'manual' | 'auto';
   trade_duration?: number; // Duration in seconds
+  duration_seconds?: number; // For short-term trades specifically
+  result?: 'win' | 'loss' | 'pending'; // For short-term trades outcome
 }
 
 // Interface for portfolio positions
