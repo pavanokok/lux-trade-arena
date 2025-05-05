@@ -51,6 +51,11 @@ const TradeMarker = ({
   // Only show closed trades with results
   if (!trade.is_closed || trade.realized_pnl === undefined) return null;
   
+  // Calculate profit percentage
+  const profitPercent = trade.realized_pnl !== undefined && trade.total > 0 
+    ? (trade.realized_pnl / trade.total) * 100 
+    : 0;
+  
   return (
     <div 
       className="absolute pointer-events-none" 
@@ -71,7 +76,8 @@ const TradeMarker = ({
         }`}
         style={{ top: `${yPosition}px` }}
       >
-        {isWin ? 'WIN' : 'LOSS'} {formatPrice(trade.realized_pnl || 0)}
+        {isWin ? 'WIN' : 'LOSS'} {formatPrice(trade.realized_pnl || 0)} 
+        <span className="ml-1">({profitPercent.toFixed(1)}%)</span>
       </div>
     </div>
   );

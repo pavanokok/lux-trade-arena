@@ -28,8 +28,6 @@ const DURATIONS = [
 
 const MIN_AMOUNT = 5;
 const MAX_AMOUNT = 1000;
-// Payout multiplier: 1.8x return on successful trades
-const PAYOUT_MULTIPLIER = 1.8;
 
 const ShortTermTrading = ({ 
   symbol, 
@@ -47,6 +45,41 @@ const ShortTermTrading = ({
   const [entryPrice, setEntryPrice] = useState<number | null>(null);
   const [showResult, setShowResult] = useState<boolean>(false);
   const [result, setResult] = useState<"win" | "loss" | null>(null);
+  const [currentMarketPrice, setCurrentMarketPrice] = useState<number>(currentPrice);
+  const [livePnL, setLivePnL] = useState<number>(0);
+  const [livePnLPercent, setLivePnLPercent] = useState<number>(0);
+
+  // Update current market price when currentPrice prop changes
+  useEffect(() => {
+    setCurrentMarketPrice(currentPrice);
+    
+    // Calculate live P&L if there's an active trade
+    if (activeTrade && entryPrice) {
+      calculateLivePnL(currentPrice);
+    }
+  }, [currentPrice]);
+  
+  // Calculate live P&L for active trades
+  const calculateLivePnL = useCallback((price: number) => {
+    if (!activeTrade || !entryPrice) return;
+    
+    // Calculate lot size (how many units were purchased)
+    const lotSize = activeTrade.total / entryPrice;
+    
+    // Calculate P&L based on direction
+    const isUp = activeTrade.type === "short_term_up";
+    const priceDiff = price - entryPrice;
+    
+    // If direction is UP, profit when price increases
+    // If direction is DOWN, profit when price decreases
+    const pnl = isUp ? priceDiff * lotSize : -priceDiff * lotSize;
+    
+    // Calculate P&L percentage relative to the initial investment
+    const pnlPercent = (pnl / activeTrade.total) * 100;
+    
+    setLivePnL(pnl);
+    setLivePnLPercent(pnlPercent);
+  }, [activeTrade, entryPrice]);
 
   // Handle trade initiation
   const initiateShortTermTrade = async (direction: "up" | "down") => {
@@ -60,15 +93,18 @@ const ShortTermTrading = ({
       return;
     }
 
-    // Store the exact current price from the props at the moment of trade creation
+    // Store the exact current price at the moment of trade creation
     const exactPrice = currentPrice;
+    
+    // Calculate how many units/lots this amount buys
+    const lotSize = amount / exactPrice;
 
     // Create new trade with the exact price
     const trade: Trade = {
       id: uuidv4(),
       user_id: "", // Will be filled by supabase
       symbol: symbol,
-      quantity: 1, // Fixed to 1 lot for binary options
+      quantity: lotSize, // Now storing actual lot size
       price: exactPrice,
       total: amount,
       type: direction === "up" ? "short_term_up" : "short_term_down", // Ensure correct direction
@@ -88,6 +124,9 @@ const ShortTermTrading = ({
     // Deduct the stake amount from user balance
     const newBalance = userBalance - amount;
     onBalanceUpdate(newBalance);
+    
+    // Calculate initial P&L (should be close to zero at entry)
+    calculateLivePnL(exactPrice);
     
     // Insert the trade into the database if user is logged in
     const { data: session } = await supabase.auth.getSession();
@@ -136,18 +175,22 @@ const ShortTermTrading = ({
       // Use the current price from props to ensure consistency with the chart
       const closePrice = currentPrice;
       
+      // Calculate lot size (how many units were purchased)
+      const lotSize = activeTrade.total / entryPrice;
+      
       // Determine if the trade was a win or loss
       const isUp = activeTrade.type === "short_term_up";
-      const priceChange = closePrice - entryPrice;
-      const isWin = (isUp && priceChange > 0) || (!isUp && priceChange < 0);
-
-      // Calculate profit/loss with the fixed 1.8x multiplier
-      // If win: initial amount * 1.8, if loss: 0
-      const profit = isWin ? amount * PAYOUT_MULTIPLIER - amount : -amount;
-      const payoutAmount = isWin ? amount * PAYOUT_MULTIPLIER : 0;
+      const priceDiff = closePrice - entryPrice;
       
-      // Update the user's balance: return initial amount + profit if win, 0 if loss
-      const newBalance = userBalance + payoutAmount;
+      // Calculate profit/loss based on direction and price movement
+      // If UP and price increased OR DOWN and price decreased = win
+      const profit = isUp ? priceDiff * lotSize : -priceDiff * lotSize;
+      
+      // Determine win/loss status
+      const isWin = (isUp && priceDiff > 0) || (!isUp && priceDiff < 0);
+      
+      // Calculate new balance: original balance + profit (or loss)
+      const newBalance = userBalance + profit;
 
       // Update the trade
       const completedTrade: Trade = {
@@ -200,19 +243,33 @@ const ShortTermTrading = ({
         setShowResult(false);
         setActiveTrade(null);
         setEntryPrice(null);
+        setLivePnL(0);
+        setLivePnLPercent(0);
       }, 3000);
     };
 
     if (countdown === 0 && activeTrade) {
       completeTrade();
     }
-  }, [countdown, activeTrade, currentPrice, entryPrice, userBalance, onTradeComplete, onBalanceUpdate, amount]);
+  }, [countdown, activeTrade, currentPrice, entryPrice, userBalance, onTradeComplete, onBalanceUpdate]);
 
   // Format time for display
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs < 10 ? "0" + secs : secs}`;
+  };
+
+  // Format percentage with sign
+  const formatPercent = (value: number) => {
+    const sign = value >= 0 ? '+' : '';
+    return `${sign}${value.toFixed(2)}%`;
+  };
+
+  // Format currency
+  const formatCurrency = (value: number) => {
+    const sign = value >= 0 ? '+' : '';
+    return value === 0 ? '$0.00' : `${sign}$${Math.abs(value).toFixed(2)}`;
   };
 
   return (
@@ -299,6 +356,10 @@ const ShortTermTrading = ({
             <span className="font-mono font-medium">${entryPrice?.toFixed(2)}</span>
           </div>
           <div className="flex justify-between">
+            <span className="text-muted-foreground">Current Price:</span>
+            <span className="font-mono font-medium">${currentMarketPrice.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
             <span className="text-muted-foreground">Direction:</span>
             <span className={`font-medium ${activeTrade.type === "short_term_up" ? "text-green-500" : "text-destructive"}`}>
               {activeTrade.type === "short_term_up" ? "UP" : "DOWN"}
@@ -309,8 +370,14 @@ const ShortTermTrading = ({
             <span className="font-mono font-medium">${activeTrade.total.toFixed(2)}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Potential Payout:</span>
-            <span className="font-mono font-medium">${(activeTrade.total * PAYOUT_MULTIPLIER).toFixed(2)}</span>
+            <span className="text-muted-foreground">Lot Size:</span>
+            <span className="font-mono font-medium">{activeTrade.quantity.toFixed(8)} {symbol}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Current P&L:</span>
+            <span className={`font-mono font-medium ${livePnL >= 0 ? 'text-success' : 'text-destructive'}`}>
+              {formatCurrency(livePnL)} ({formatPercent(livePnLPercent)})
+            </span>
           </div>
         </div>
       )}
@@ -327,12 +394,13 @@ const ShortTermTrading = ({
             } text-white text-center animate-scale-in`}
           >
             <h3 className="text-3xl font-bold mb-2">
-              {result === "win" ? "YOU WON!" : "YOU LOST!"}
+              {result === "win" ? "TRADE PROFIT" : "TRADE LOSS"}
             </h3>
             <p className="text-xl font-mono">
-              {result === "win" 
-                ? `+$${(amount * PAYOUT_MULTIPLIER - amount).toFixed(2)}` 
-                : `-$${amount.toFixed(2)}`}
+              {formatCurrency(livePnL)}
+            </p>
+            <p className="text-lg font-mono mt-1">
+              {formatPercent(livePnLPercent)}
             </p>
           </div>
         </div>
@@ -343,7 +411,7 @@ const ShortTermTrading = ({
         <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
         <p>
           Predict if the price will go up or down within the selected time period. 
-          If your prediction is correct, you receive {PAYOUT_MULTIPLIER}x your stake amount.
+          Your profit or loss will be calculated based on the price difference between entry and exit multiplied by your lot size.
         </p>
       </div>
     </Card>
