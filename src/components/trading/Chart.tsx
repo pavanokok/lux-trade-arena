@@ -1,10 +1,9 @@
 
 import { useRef, useEffect, useState } from 'react';
-import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeriesOptions, Time, LineData } from 'lightweight-charts';
+import { createChart, ColorType, IChartApi, ISeriesApi, Time, LineData } from 'lightweight-charts';
 import { CandleData } from '@/utils/marketData';
 import { Trade } from '@/types/trade';
 import TradeMarker from './TradeMarker';
-import { TooltipProvider } from '@/components/ui/tooltip';
 
 interface ChartProps {
   data: CandleData[];
@@ -23,6 +22,7 @@ const Chart = ({ data, width = '100%', height = 400, darkMode = true, symbol, tr
   const [lineSeries, setLineSeries] = useState<ISeriesApi<"Line"> | null>(null);
   const [chartDimensions, setChartDimensions] = useState({ width: 0, height: 0 });
   const [visibleRange, setVisibleRange] = useState({ minTime: 0, maxTime: 0, minPrice: 0, maxPrice: 0 });
+  const chartRef = useRef<IChartApi | null>(null);
 
   // Chart colors based on theme
   const backgroundColor = darkMode ? '#131722' : '#FFFFFF';
@@ -34,12 +34,17 @@ const Chart = ({ data, width = '100%', height = 400, darkMode = true, symbol, tr
   // Initialize chart
   useEffect(() => {
     if (chartContainerRef.current) {
+      // Clean up any previous chart instance to prevent memory leaks
+      if (chartRef.current) {
+        chartRef.current.remove();
+      }
+
       const handleResize = () => {
-        if (chart && chartContainerRef.current) {
+        if (chartRef.current && chartContainerRef.current) {
           const newWidth = chartContainerRef.current.clientWidth;
           const newHeight = height as number;
           
-          chart.applyOptions({ width: newWidth });
+          chartRef.current.applyOptions({ width: newWidth });
           setChartDimensions({ width: newWidth, height: newHeight });
         }
       };
@@ -57,7 +62,7 @@ const Chart = ({ data, width = '100%', height = 400, darkMode = true, symbol, tr
         },
         timeScale: {
           timeVisible: true,
-          secondsVisible: false,
+          secondsVisible: true,
         },
         rightPriceScale: {
           borderColor: gridColor,
@@ -90,6 +95,8 @@ const Chart = ({ data, width = '100%', height = 400, darkMode = true, symbol, tr
         crosshairMarkerRadius: 4,
       });
 
+      // Store references
+      chartRef.current = newChart;
       setChart(newChart);
       setSeries(newSeries);
       setLineSeries(newLineSeries);
@@ -100,26 +107,28 @@ const Chart = ({ data, width = '100%', height = 400, darkMode = true, symbol, tr
 
       // Track visible range
       newChart.timeScale().subscribeVisibleLogicalRangeChange(logicalRange => {
-        if (logicalRange !== null && series) {
-          const barsInfo = series.barsInLogicalRange(logicalRange);
+        if (logicalRange !== null && newSeries) {
+          const barsInfo = newSeries.barsInLogicalRange(logicalRange);
           if (barsInfo !== null && barsInfo.barsBefore + barsInfo.barsAfter > 0) {
-            const firstBar = data[Math.max(0, data.length - barsInfo.barsBefore - barsInfo.barsAfter)];
-            const lastBar = data[Math.min(data.length - 1, data.length - barsInfo.barsAfter)];
+            const firstIndex = Math.max(0, data.length - barsInfo.barsBefore - barsInfo.barsAfter);
+            const lastIndex = Math.min(data.length - 1, data.length - barsInfo.barsAfter);
             
-            if (firstBar && lastBar) {
-              const prices = data
-                .slice(
-                  Math.max(0, data.length - barsInfo.barsBefore - barsInfo.barsAfter),
-                  Math.min(data.length, data.length - barsInfo.barsAfter + 1)
-                )
-                .flatMap(bar => [bar.high, bar.low]);
+            if (firstIndex >= 0 && lastIndex >= 0 && firstIndex < data.length && lastIndex < data.length) {
+              const firstBar = data[firstIndex];
+              const lastBar = data[lastIndex];
               
-              setVisibleRange({
-                minTime: firstBar.time as number * 1000,
-                maxTime: lastBar.time as number * 1000,
-                minPrice: Math.min(...prices),
-                maxPrice: Math.max(...prices),
-              });
+              if (firstBar && lastBar) {
+                const prices = data
+                  .slice(firstIndex, lastIndex + 1)
+                  .flatMap(bar => [bar.high, bar.low]);
+                
+                setVisibleRange({
+                  minTime: (typeof firstBar.time === 'number') ? firstBar.time * 1000 : Number(firstBar.time) * 1000,
+                  maxTime: (typeof lastBar.time === 'number') ? lastBar.time * 1000 : Number(lastBar.time) * 1000,
+                  minPrice: Math.min(...prices),
+                  maxPrice: Math.max(...prices),
+                });
+              }
             }
           }
         }
@@ -129,10 +138,13 @@ const Chart = ({ data, width = '100%', height = 400, darkMode = true, symbol, tr
 
       return () => {
         window.removeEventListener('resize', handleResize);
-        newChart.remove();
+        if (chartRef.current) {
+          chartRef.current.remove();
+          chartRef.current = null;
+        }
       };
     }
-  }, [darkMode, height]);
+  }, [darkMode, height, data.length]);
 
   // Update data when it changes
   useEffect(() => {
@@ -155,32 +167,53 @@ const Chart = ({ data, width = '100%', height = 400, darkMode = true, symbol, tr
       
       // If we have chart data, use its time range
       if (data.length > 1) {
+        const firstCandle = data[0];
+        const firstTime = typeof firstCandle.time === 'number' ? 
+          firstCandle.time : Number(firstCandle.time);
+          
         const firstPoint = {
-          time: data[0].time as Time,
+          time: firstTime as Time,
           value: livePrice
         };
+        
         const lastPoint = {
           time: now as Time,
           value: livePrice
         };
         
+        // Add points to create a horizontal line at the current price
         lineData.push(firstPoint, lastPoint);
-      } else {
-        // Fallback if no data
-        lineData.push({
-          time: now as Time,
-          value: livePrice
-        });
+        
+        // Highlight the current price
+        if (chart) {
+          chart.priceScale('right').applyOptions({
+            scaleMargins: {
+              top: 0.1,
+              bottom: 0.2,
+            },
+          });
+        }
       }
       
       lineSeries.setData(lineData);
+      
+      // Set price line to show current price more visibly
+      lineSeries.applyOptions({
+        priceLineVisible: true,
+        lastValueVisible: true,
+      });
     }
-  }, [lineSeries, livePrice, data]);
+  }, [lineSeries, livePrice, data, chart]);
 
   return (
     <div>
       <div className="mb-4">
         <h3 className="text-lg font-medium">{symbol} Price Chart</h3>
+        {livePrice && (
+          <div className="text-xl font-mono font-medium">
+            ${livePrice.toFixed(2)}
+          </div>
+        )}
       </div>
       <div 
         ref={chartContainerRef} 

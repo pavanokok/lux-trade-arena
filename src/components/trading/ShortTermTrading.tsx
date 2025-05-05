@@ -28,6 +28,8 @@ const DURATIONS = [
 
 const MIN_AMOUNT = 5;
 const MAX_AMOUNT = 1000;
+// Payout multiplier: 1.8x return on successful trades
+const PAYOUT_MULTIPLIER = 1.8;
 
 const ShortTermTrading = ({ 
   symbol, 
@@ -58,15 +60,18 @@ const ShortTermTrading = ({
       return;
     }
 
-    // Create new trade
+    // Store the exact current price from the props at the moment of trade creation
+    const exactPrice = currentPrice;
+
+    // Create new trade with the exact price
     const trade: Trade = {
       id: uuidv4(),
       user_id: "", // Will be filled by supabase
       symbol: symbol,
-      quantity: amount,
-      price: currentPrice,
+      quantity: 1, // Fixed to 1 lot for binary options
+      price: exactPrice,
       total: amount,
-      type: direction === "up" ? "short_term_up" : "short_term_down",
+      type: direction === "up" ? "short_term_up" : "short_term_down", // Ensure correct direction
       order_type: "short_term",
       created_at: new Date().toISOString(),
       entry_timestamp: new Date().toISOString(),
@@ -77,7 +82,7 @@ const ShortTermTrading = ({
 
     // Start the countdown
     setCountdown(duration);
-    setEntryPrice(currentPrice);
+    setEntryPrice(exactPrice);
     setActiveTrade(trade);
     
     // Deduct the stake amount from user balance
@@ -128,21 +133,28 @@ const ShortTermTrading = ({
     const completeTrade = async () => {
       if (!activeTrade || !entryPrice || countdown > 0) return;
 
+      // Use the current price from props to ensure consistency with the chart
+      const closePrice = currentPrice;
+      
       // Determine if the trade was a win or loss
       const isUp = activeTrade.type === "short_term_up";
-      const priceChange = currentPrice - entryPrice;
+      const priceChange = closePrice - entryPrice;
       const isWin = (isUp && priceChange > 0) || (!isUp && priceChange < 0);
 
-      // Calculate profit/loss
-      const profit = isWin ? activeTrade.total : -activeTrade.total;
-      const newBalance = userBalance + (isWin ? activeTrade.total * 2 : 0);
+      // Calculate profit/loss with the fixed 1.8x multiplier
+      // If win: initial amount * 1.8, if loss: 0
+      const profit = isWin ? amount * PAYOUT_MULTIPLIER - amount : -amount;
+      const payoutAmount = isWin ? amount * PAYOUT_MULTIPLIER : 0;
+      
+      // Update the user's balance: return initial amount + profit if win, 0 if loss
+      const newBalance = userBalance + payoutAmount;
 
       // Update the trade
       const completedTrade: Trade = {
         ...activeTrade,
         is_closed: true,
         close_timestamp: new Date().toISOString(),
-        close_price: currentPrice,
+        close_price: closePrice,
         realized_pnl: profit,
         close_type: "auto",
         result: isWin ? "win" : "loss"
@@ -194,7 +206,7 @@ const ShortTermTrading = ({
     if (countdown === 0 && activeTrade) {
       completeTrade();
     }
-  }, [countdown, activeTrade, currentPrice, entryPrice, userBalance, onTradeComplete, onBalanceUpdate]);
+  }, [countdown, activeTrade, currentPrice, entryPrice, userBalance, onTradeComplete, onBalanceUpdate, amount]);
 
   // Format time for display
   const formatTime = (seconds: number) => {
@@ -296,6 +308,10 @@ const ShortTermTrading = ({
             <span className="text-muted-foreground">Amount:</span>
             <span className="font-mono font-medium">${activeTrade.total.toFixed(2)}</span>
           </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Potential Payout:</span>
+            <span className="font-mono font-medium">${(activeTrade.total * PAYOUT_MULTIPLIER).toFixed(2)}</span>
+          </div>
         </div>
       )}
 
@@ -314,7 +330,9 @@ const ShortTermTrading = ({
               {result === "win" ? "YOU WON!" : "YOU LOST!"}
             </h3>
             <p className="text-xl font-mono">
-              {result === "win" ? `+$${amount.toFixed(2)}` : `-$${amount.toFixed(2)}`}
+              {result === "win" 
+                ? `+$${(amount * PAYOUT_MULTIPLIER - amount).toFixed(2)}` 
+                : `-$${amount.toFixed(2)}`}
             </p>
           </div>
         </div>
@@ -325,7 +343,7 @@ const ShortTermTrading = ({
         <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
         <p>
           Predict if the price will go up or down within the selected time period. 
-          If your prediction is correct, you double your stake amount.
+          If your prediction is correct, you receive {PAYOUT_MULTIPLIER}x your stake amount.
         </p>
       </div>
     </Card>
