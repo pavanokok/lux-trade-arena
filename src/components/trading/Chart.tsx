@@ -155,7 +155,7 @@ const Chart = ({ data, width = '100%', height = 400, darkMode = true, symbol, tr
       // If we have chart data, use its time range
       if (data.length > 1) {
         const firstPoint = {
-          time: data[0].time as number,
+          time: data[0].time as Time,
           value: livePrice
         };
         const lastPoint = {
