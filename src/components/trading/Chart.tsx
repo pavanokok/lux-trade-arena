@@ -4,6 +4,7 @@ import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeriesOptions
 import { CandleData } from '@/utils/marketData';
 import { Trade } from '@/types/trade';
 import TradeMarker from './TradeMarker';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 interface ChartProps {
   data: CandleData[];
