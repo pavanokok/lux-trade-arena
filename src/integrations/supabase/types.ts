@@ -353,35 +353,59 @@ export type Database = {
       }
       trades: {
         Row: {
+          close_price: number | null
+          close_timestamp: string | null
+          close_type: string | null
           created_at: string
+          entry_timestamp: string | null
           id: string
+          is_closed: boolean | null
           order_type: string
+          position_type: string | null
           price: number
           quantity: number
+          realized_pnl: number | null
           symbol: string
           total: number
+          trade_duration: number | null
           type: string
           user_id: string
         }
         Insert: {
+          close_price?: number | null
+          close_timestamp?: string | null
+          close_type?: string | null
           created_at?: string
+          entry_timestamp?: string | null
           id?: string
+          is_closed?: boolean | null
           order_type: string
+          position_type?: string | null
           price: number
           quantity: number
+          realized_pnl?: number | null
           symbol: string
           total: number
+          trade_duration?: number | null
           type: string
           user_id: string
         }
         Update: {
+          close_price?: number | null
+          close_timestamp?: string | null
+          close_type?: string | null
           created_at?: string
+          entry_timestamp?: string | null
           id?: string
+          is_closed?: boolean | null
           order_type?: string
+          position_type?: string | null
           price?: number
           quantity?: number
+          realized_pnl?: number | null
           symbol?: string
           total?: number
+          trade_duration?: number | null
           type?: string
           user_id?: string
         }
