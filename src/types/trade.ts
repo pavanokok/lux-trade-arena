@@ -12,6 +12,13 @@ export interface Trade {
   order_type: 'market' | 'limit';
   created_at: string;
   position_type?: 'long' | 'short'; // For displaying position type
+  entry_timestamp?: string;
+  close_timestamp?: string;
+  close_price?: number;
+  realized_pnl?: number;
+  is_closed?: boolean;
+  close_type?: 'manual' | 'auto';
+  trade_duration?: number; // Duration in seconds
 }
 
 // Interface for portfolio positions
@@ -26,4 +33,6 @@ export interface Position {
   pnlPercent: number;
   type: 'long' | 'short';
   assetType: AssetType; // Crypto or Stock
+  entryTimestamp?: string;
+  tradeIds?: string[]; // IDs of trades that make up this position
 }

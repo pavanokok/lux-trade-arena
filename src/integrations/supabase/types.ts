@@ -9,33 +9,6 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      badges: {
-        Row: {
-          category: string
-          description: string
-          id: string
-          image_url: string
-          name: string
-          xp_reward: number
-        }
-        Insert: {
-          category: string
-          description: string
-          id?: string
-          image_url: string
-          name: string
-          xp_reward?: number
-        }
-        Update: {
-          category?: string
-          description?: string
-          id?: string
-          image_url?: string
-          name?: string
-          xp_reward?: number
-        }
-        Relationships: []
-      }
       code_versions: {
         Row: {
           code_content: string
@@ -67,87 +40,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      courses: {
-        Row: {
-          created_at: string
-          description: string
-          difficulty: string
-          id: string
-          image_url: string | null
-          language: string
-          lessons_count: number
-          order_index: number
-          title: string
-          updated_at: string
-          xp_reward: number
-        }
-        Insert: {
-          created_at?: string
-          description: string
-          difficulty: string
-          id?: string
-          image_url?: string | null
-          language: string
-          lessons_count?: number
-          order_index: number
-          title: string
-          updated_at?: string
-          xp_reward?: number
-        }
-        Update: {
-          created_at?: string
-          description?: string
-          difficulty?: string
-          id?: string
-          image_url?: string | null
-          language?: string
-          lessons_count?: number
-          order_index?: number
-          title?: string
-          updated_at?: string
-          xp_reward?: number
-        }
-        Relationships: []
-      }
-      download_history: {
-        Row: {
-          downloaded_at: string | null
-          format: string
-          id: string
-          quality: string
-          size: string | null
-          status: string | null
-          thumbnail: string | null
-          user_id: string | null
-          video_title: string
-          video_url: string
-        }
-        Insert: {
-          downloaded_at?: string | null
-          format: string
-          id?: string
-          quality: string
-          size?: string | null
-          status?: string | null
-          thumbnail?: string | null
-          user_id?: string | null
-          video_title: string
-          video_url: string
-        }
-        Update: {
-          downloaded_at?: string | null
-          format?: string
-          id?: string
-          quality?: string
-          size?: string | null
-          status?: string | null
-          thumbnail?: string | null
-          user_id?: string | null
-          video_title?: string
-          video_url?: string
-        }
-        Relationships: []
       }
       lessons: {
         Row: {
@@ -186,15 +78,7 @@ export type Database = {
           updated_at?: string
           xp_reward?: number
         }
-        Relationships: [
-          {
-            foreignKeyName: "lessons_course_id_fkey"
-            columns: ["course_id"]
-            isOneToOne: false
-            referencedRelation: "courses"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       market_data: {
         Row: {
@@ -522,15 +406,7 @@ export type Database = {
           id?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "user_badges_badge_id_fkey"
-            columns: ["badge_id"]
-            isOneToOne: false
-            referencedRelation: "badges"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       user_course_progress: {
         Row: {
@@ -563,15 +439,7 @@ export type Database = {
           progress_percentage?: number
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "user_course_progress_course_id_fkey"
-            columns: ["course_id"]
-            isOneToOne: false
-            referencedRelation: "courses"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       user_lesson_progress: {
         Row: {

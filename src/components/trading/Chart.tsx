@@ -2,6 +2,8 @@
 import { useRef, useEffect, useState } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeriesOptions, Time } from 'lightweight-charts';
 import { CandleData } from '@/utils/marketData';
+import { Trade } from '@/types/trade';
+import TradeMarker from './TradeMarker';
 
 interface ChartProps {
   data: CandleData[];
@@ -9,12 +11,15 @@ interface ChartProps {
   height?: number;
   darkMode?: boolean;
   symbol: string;
+  trades?: Trade[];
 }
 
-const Chart = ({ data, width = '100%', height = 400, darkMode = true, symbol }: ChartProps) => {
+const Chart = ({ data, width = '100%', height = 400, darkMode = true, symbol, trades = [] }: ChartProps) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const [chart, setChart] = useState<IChartApi | null>(null);
   const [series, setSeries] = useState<ISeriesApi<"Candlestick"> | null>(null);
+  const [chartDimensions, setChartDimensions] = useState({ width: 0, height: 0 });
+  const [visibleRange, setVisibleRange] = useState({ minTime: 0, maxTime: 0, minPrice: 0, maxPrice: 0 });
 
   // Chart colors based on theme
   const backgroundColor = darkMode ? '#131722' : '#FFFFFF';
@@ -27,9 +32,13 @@ const Chart = ({ data, width = '100%', height = 400, darkMode = true, symbol }: 
   useEffect(() => {
     if (chartContainerRef.current) {
       const handleResize = () => {
-        chart?.applyOptions({ 
-          width: chartContainerRef.current?.clientWidth || 600 
-        });
+        if (chart && chartContainerRef.current) {
+          const newWidth = chartContainerRef.current.clientWidth;
+          const newHeight = height as number;
+          
+          chart.applyOptions({ width: newWidth });
+          setChartDimensions({ width: newWidth, height: newHeight });
+        }
       };
 
       const newChart = createChart(chartContainerRef.current, {
@@ -66,6 +75,37 @@ const Chart = ({ data, width = '100%', height = 400, darkMode = true, symbol }: 
 
       setChart(newChart);
       setSeries(newSeries);
+      setChartDimensions({ 
+        width: chartContainerRef.current.clientWidth, 
+        height: height as number 
+      });
+
+      // Track visible range
+      newChart.timeScale().subscribeVisibleLogicalRangeChange(logicalRange => {
+        if (logicalRange !== null && series) {
+          const barsInfo = series.barsInLogicalRange(logicalRange);
+          if (barsInfo !== null && barsInfo.barsBefore + barsInfo.barsAfter > 0) {
+            const firstBar = data[Math.max(0, data.length - barsInfo.barsBefore - barsInfo.barsAfter)];
+            const lastBar = data[Math.min(data.length - 1, data.length - barsInfo.barsAfter)];
+            
+            if (firstBar && lastBar) {
+              const prices = data
+                .slice(
+                  Math.max(0, data.length - barsInfo.barsBefore - barsInfo.barsAfter),
+                  Math.min(data.length, data.length - barsInfo.barsAfter + 1)
+                )
+                .flatMap(bar => [bar.high, bar.low]);
+              
+              setVisibleRange({
+                minTime: firstBar.time as number * 1000,
+                maxTime: lastBar.time as number * 1000,
+                minPrice: Math.min(...prices),
+                maxPrice: Math.max(...prices),
+              });
+            }
+          }
+        }
+      });
 
       window.addEventListener('resize', handleResize);
 
@@ -95,9 +135,27 @@ const Chart = ({ data, width = '100%', height = 400, darkMode = true, symbol }: 
       </div>
       <div 
         ref={chartContainerRef} 
-        className="rounded-lg border border-border/40 bg-secondary/10 overflow-hidden"
+        className="rounded-lg border border-border/40 bg-secondary/10 overflow-hidden relative"
         style={{ height }}
-      />
+      >
+        {/* Trade markers overlay */}
+        {trades && trades.length > 0 && visibleRange.minTime > 0 && (
+          <div className="absolute inset-0 pointer-events-none">
+            {trades.map(trade => (
+              <TradeMarker 
+                key={trade.id}
+                trade={trade}
+                chartWidth={chartDimensions.width}
+                chartHeight={chartDimensions.height}
+                minTime={visibleRange.minTime}
+                maxTime={visibleRange.maxTime}
+                minPrice={visibleRange.minPrice}
+                maxPrice={visibleRange.maxPrice}
+              />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

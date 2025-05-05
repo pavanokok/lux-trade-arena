@@ -1,5 +1,4 @@
-
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ArrowDown, ArrowUp, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -50,6 +49,11 @@ const MarketOrder = ({
   
   // Calculate max quantity user can sell from their holdings
   const maxSellQuantity = relevantPosition ? Math.abs(relevantPosition.quantity) : 0;
+
+  // Update limitPrice when currentPrice changes
+  useEffect(() => {
+    setLimitPrice(currentPrice.toString());
+  }, [currentPrice]);
 
   const handleQuantityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -123,6 +127,8 @@ const MarketOrder = ({
         orderType === 'sell' && positionType === 'short' ? 'short' :
         'cover'; // orderType === 'buy' && positionType === 'short'
       
+      // Create a new trade record
+      const now = new Date().toISOString();
       const { data: trade, error } = await supabase
         .from('trades')
         .insert([{
@@ -133,11 +139,82 @@ const MarketOrder = ({
           total: orderTotal,
           type: tradeType,
           order_type: orderMethod,
+          position_type: positionType,
+          entry_timestamp: now,
+          is_closed: false
         }])
         .select()
         .single();
       
       if (error) throw error;
+      
+      // Update user balance
+      const { error: balanceError } = await supabase
+        .from('users')
+        .update({ 
+          virtual_balance: tradeType === 'buy' || tradeType === 'cover' 
+            ? userBalance - orderTotal 
+            : userBalance + orderTotal 
+        })
+        .eq('id', sessionData.session.user.id);
+        
+      if (balanceError) throw balanceError;
+      
+      // Set up automatic trade closing after fixed time if needed
+      // For demonstration, will close after 1 minute
+      if (tradeType === 'buy' || tradeType === 'short') {
+        setTimeout(async () => {
+          try {
+            // Get the latest price
+            const closePrice = currentPrice; // In real app, fetch the latest price
+            
+            // Calculate PnL
+            let realizedPnl = 0;
+            if (tradeType === 'buy') { // Long position
+              realizedPnl = (closePrice - orderPrice) * Number(quantity);
+            } else { // Short position
+              realizedPnl = (orderPrice - closePrice) * Number(quantity);
+            }
+            
+            // Update the trade as closed
+            const { error: closeError } = await supabase
+              .from('trades')
+              .update({
+                is_closed: true,
+                close_price: closePrice,
+                close_timestamp: new Date().toISOString(),
+                realized_pnl: realizedPnl,
+                close_type: 'auto',
+                trade_duration: 60 // 60 seconds
+              })
+              .eq('id', trade.id);
+              
+            if (closeError) throw closeError;
+            
+            // Update user balance
+            const updatedBalance = tradeType === 'buy' 
+              ? userBalance - orderTotal + orderTotal + realizedPnl
+              : userBalance + orderTotal - orderTotal + realizedPnl;
+              
+            const { error: updateBalanceError } = await supabase
+              .from('users')
+              .update({ virtual_balance: updatedBalance })
+              .eq('id', sessionData.session.user.id);
+              
+            if (updateBalanceError) throw updateBalanceError;
+            
+            // Notify the user
+            const result = realizedPnl >= 0 ? 'WIN' : 'LOSS';
+            toast.success(`Auto-closed ${symbol} trade: ${result}`, {
+              description: `PnL: ${formatPrice(realizedPnl)}`
+            });
+            
+          } catch (closeError) {
+            console.error('Error closing trade:', closeError);
+            toast.error('Failed to auto-close trade');
+          }
+        }, 60000); // 1 minute (60000ms)
+      }
       
       if (onPlaceOrder && trade) {
         onPlaceOrder(trade as Trade);
