@@ -70,7 +70,7 @@ const TradeMarker = ({
     if (trade.type === 'sell') return 'SELL';
     if (trade.type === 'short') return 'SHORT';
     if (trade.type === 'cover') return 'COVER';
-    return trade.type.toUpperCase();
+    return trade.type;
   })();
   
   return (
