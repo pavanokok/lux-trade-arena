@@ -18,6 +18,7 @@ interface ShortTermTradingProps {
   userBalance: number;
   onTradeComplete: (trade: Trade) => void;
   onBalanceUpdate: (newBalance: number) => void;
+  onTradeActivation: (trade: Trade | null) => void;
 }
 
 const DURATIONS = [
@@ -35,7 +36,8 @@ const ShortTermTrading = ({
   chartData, 
   userBalance,
   onTradeComplete,
-  onBalanceUpdate
+  onBalanceUpdate,
+  onTradeActivation
 }: ShortTermTradingProps) => {
   // State for trading parameters
   const [amount, setAmount] = useState<number>(10);
@@ -121,6 +123,9 @@ const ShortTermTrading = ({
     setEntryPrice(exactPrice);
     setActiveTrade(trade);
     
+    // Notify parent component about active trade for chart visualization
+    onTradeActivation(trade);
+    
     // Deduct the stake amount from user balance
     const newBalance = userBalance - amount;
     onBalanceUpdate(newBalance);
@@ -190,7 +195,7 @@ const ShortTermTrading = ({
       // Determine win/loss status
       const isWin = (isUp && priceDiff > 0) || (!isUp && priceDiff < 0);
       
-      // Calculate new balance: original balance + profit (or loss)
+      // Calculate new balance: original balance + initial amount + profit (or loss)
       const newBalance = userBalance + activeTrade.total + profit;
 
       // Update the trade
@@ -239,6 +244,9 @@ const ShortTermTrading = ({
       onTradeComplete(completedTrade);
       onBalanceUpdate(newBalance);
       
+      // Clear the active trade in parent component for chart visualization
+      onTradeActivation(null);
+      
       // Hide result after a delay
       setTimeout(() => {
         setShowResult(false);
@@ -252,7 +260,7 @@ const ShortTermTrading = ({
     if (countdown === 0 && activeTrade) {
       completeTrade();
     }
-  }, [countdown, activeTrade, currentPrice, entryPrice, userBalance, onTradeComplete, onBalanceUpdate]);
+  }, [countdown, activeTrade, currentPrice, entryPrice, userBalance, onTradeComplete, onBalanceUpdate, onTradeActivation]);
 
   // Format time for display
   const formatTime = (seconds: number) => {
@@ -272,6 +280,14 @@ const ShortTermTrading = ({
     const sign = value >= 0 ? '+' : '';
     return value === 0 ? '$0.00' : `${sign}$${Math.abs(value).toFixed(2)}`;
   };
+
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      // Clear any active trades when component unmounts
+      onTradeActivation(null);
+    };
+  }, [onTradeActivation]);
 
   return (
     <Card className="p-4 space-y-4">

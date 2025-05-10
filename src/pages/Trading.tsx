@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -8,12 +9,13 @@ import MarketInfo from "@/components/trading/MarketInfo";
 import OrderBook from "@/components/trading/OrderBook";
 import ShortTermTrading from "@/components/trading/ShortTermTrading";
 import { fetchCryptoData, fetchCryptoHistoricalData, searchAssets, MarketData, CandleData } from "@/utils/marketData";
-import { Bitcoin, Search, RefreshCcw, LoaderCircle } from "lucide-react";
+import { Search, RefreshCcw, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Trade } from "@/types/trade";
 import { supabase } from "@/integrations/supabase/client";
+import PositionCloseModal from "@/components/trading/PositionCloseModal";
 
 const AVAILABLE_ASSETS = [
   { id: "bitcoin", symbol: "BTC", name: "Bitcoin", type: "crypto" },
@@ -61,6 +63,13 @@ const Trading = () => {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
 
+  // Position close modal
+  const [isCloseModalOpen, setIsCloseModalOpen] = useState(false);
+  const [selectedPosition, setSelectedPosition] = useState<any>(null);
+
+  // Active trade for chart visualization
+  const [activeTrade, setActiveTrade] = useState<Trade | null>(null);
+
   // Update URL when selected asset changes
   useEffect(() => {
     navigate(`/trading?symbol=${selectedAsset.symbol}&id=${selectedAsset.id}`, { replace: true });
@@ -101,7 +110,9 @@ const Trading = () => {
           calculatePositions(trades as Trade[]);
         }
       } else {
-        toast.error("Please log in to access full trading features");
+        toast("Demo mode active - trades will not be saved", {
+          description: "Login to save your trading history"
+        });
         // Still allow demo trading without login
       }
     };
@@ -110,26 +121,40 @@ const Trading = () => {
   }, []);
 
   // Calculate user positions from trades
-  const calculatePositions = (trades: Trade[]) => {
+  const calculatePositions = useCallback((trades: Trade[]) => {
     const positions: Record<string, any> = {};
     
-    trades.forEach(trade => {
+    // Filter out short-term trades as they don't affect positions
+    const positionTrades = trades.filter(
+      trade => !["short_term_up", "short_term_down"].includes(trade.type)
+    );
+    
+    positionTrades.forEach(trade => {
       if (!positions[trade.symbol]) {
         positions[trade.symbol] = {
           symbol: trade.symbol,
           quantity: 0,
           totalCost: 0,
-          type: 'long'
+          type: 'long',
+          tradeIds: [], // Store trade IDs to update them when closing
         };
       }
       
       const position = positions[trade.symbol];
+      
+      // Add trade ID to this position
+      if (!position.tradeIds.includes(trade.id)) {
+        position.tradeIds.push(trade.id);
+      }
       
       switch(trade.type) {
         case 'buy':
           position.quantity += trade.quantity;
           position.totalCost += trade.total;
           position.type = 'long';
+          if (!position.entryTimestamp || new Date(trade.created_at) < new Date(position.entryTimestamp)) {
+            position.entryTimestamp = trade.created_at;
+          }
           break;
         case 'sell':
           position.quantity -= trade.quantity;
@@ -137,20 +162,54 @@ const Trading = () => {
           break;
         case 'short':
           position.quantity -= trade.quantity; // Negative for shorts
-          position.totalCost -= trade.total; // Credit for shorts
+          position.totalCost += trade.total; // Money received
           position.type = 'short';
+          if (!position.entryTimestamp || new Date(trade.created_at) < new Date(position.entryTimestamp)) {
+            position.entryTimestamp = trade.created_at;
+          }
           break;
         case 'cover':
           position.quantity += trade.quantity;
-          position.totalCost += trade.total;
+          position.totalCost -= trade.total;
           break;
       }
     });
     
     // Filter out closed positions (quantity = 0)
-    const activePositions = Object.values(positions).filter((position: any) => position.quantity !== 0);
+    const activePositions = Object.values(positions).filter((position: any) => Math.abs(position.quantity) > 0.00000001);
+    
+    // Calculate current values and P&L
+    activePositions.forEach((position: any) => {
+      // Current price from market data or use null if not available
+      const currentPrice = (position.symbol === selectedAsset.symbol && marketData?.price) 
+        ? marketData.price 
+        : null;
+      
+      if (currentPrice !== null) {
+        const avgPrice = Math.abs(position.totalCost / position.quantity);
+        
+        if (position.type === 'long') {
+          position.currentValue = position.quantity * currentPrice;
+          position.pnl = (currentPrice - avgPrice) * position.quantity;
+        } else {
+          position.currentValue = Math.abs(position.quantity) * currentPrice;
+          position.pnl = (avgPrice - currentPrice) * Math.abs(position.quantity);
+        }
+        
+        position.avgBuyPrice = avgPrice;
+        position.currentPrice = currentPrice;
+        position.pnlPercent = (position.pnl / Math.abs(position.totalCost)) * 100;
+      } else {
+        position.avgBuyPrice = Math.abs(position.totalCost / position.quantity);
+        position.currentPrice = null;
+        position.currentValue = 0;
+        position.pnl = 0;
+        position.pnlPercent = 0;
+      }
+    });
+    
     setUserPositions(activePositions);
-  };
+  }, [marketData?.price, selectedAsset.symbol]);
 
   // Fetch market data when selected asset changes
   useEffect(() => {
@@ -159,6 +218,11 @@ const Trading = () => {
       try {
         const data = await fetchCryptoData(selectedAsset.id);
         setMarketData(data);
+        
+        // Recalculate positions when market data changes
+        if (orders.length > 0) {
+          calculatePositions(orders);
+        }
       } catch (error) {
         console.error("Error fetching market data:", error);
         toast.error(`Error loading ${selectedAsset.name} data`);
@@ -169,11 +233,11 @@ const Trading = () => {
 
     fetchData();
     
-    // Set up polling for real-time updates (every 30 seconds)
-    const intervalId = setInterval(fetchData, 30000);
+    // Set up polling for real-time updates (every 10 seconds)
+    const intervalId = setInterval(fetchData, 10000);
     
     return () => clearInterval(intervalId);
-  }, [selectedAsset]);
+  }, [selectedAsset, calculatePositions, orders]);
 
   // Fetch historical data for charts
   useEffect(() => {
@@ -215,17 +279,9 @@ const Trading = () => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Make sure we have a reference to the active trade for the Chart component
-  const [activeTrade, setActiveTrade] = useState<Trade | null>(null);
-  
   // Handle order placement
   const handlePlaceOrder = async (order: Trade) => {
     const { data: sessionData } = await supabase.auth.getSession();
-    if (!sessionData.session) {
-      toast.error("Please log in to place orders");
-      navigate("/login");
-      return;
-    }
     
     // Check if user has enough balance for buy orders
     if ((order.type === 'buy' || order.type === 'cover') && order.total > userBalance) {
@@ -242,6 +298,13 @@ const Trading = () => {
       }
     }
     
+    // Add user_id if logged in
+    if (sessionData?.session?.user) {
+      order.user_id = sessionData.session.user.id;
+    } else {
+      order.user_id = "demo-user"; // For demo mode
+    }
+    
     setOrders((prev) => [order, ...prev]);
     
     // Update user balance
@@ -253,15 +316,17 @@ const Trading = () => {
     }
     
     // Update the balance in Supabase
-    const { error: balanceError } = await supabase
-      .from('users')
-      .update({ virtual_balance: newBalance })
-      .eq('id', sessionData.session.user.id);
-      
-    if (balanceError) {
-      console.error('Error updating balance:', balanceError);
-      toast.error('Error updating your balance');
-      return;
+    if (sessionData?.session?.user) {
+      const { error: balanceError } = await supabase
+        .from('users')
+        .update({ virtual_balance: newBalance })
+        .eq('id', sessionData.session.user.id);
+        
+      if (balanceError) {
+        console.error('Error updating balance:', balanceError);
+        toast.error('Error updating your balance');
+        return;
+      }
     }
     
     setUserBalance(newBalance);
@@ -296,6 +361,43 @@ const Trading = () => {
     setActiveTrade(trade);
   };
 
+  // Open position close modal
+  const handleOpenCloseModal = (position: any) => {
+    setSelectedPosition(position);
+    setIsCloseModalOpen(true);
+  };
+
+  // Handle position close
+  const handlePositionClosed = async () => {
+    // Refresh data after closing a position
+    const { data: sessionData } = await supabase.auth.getSession();
+    
+    if (sessionData?.session?.user) {
+      // Fetch updated balance
+      const { data: userData } = await supabase
+        .from('users')
+        .select('virtual_balance')
+        .eq('id', sessionData.session.user.id)
+        .single();
+        
+      if (userData) {
+        setUserBalance(userData.virtual_balance);
+      }
+      
+      // Fetch updated trades
+      const { data: trades } = await supabase
+        .from('trades')
+        .select('*')
+        .eq('user_id', sessionData.session.user.id)
+        .order('created_at', { ascending: false });
+        
+      if (trades) {
+        setOrders(trades as Trade[]);
+        calculatePositions(trades as Trade[]);
+      }
+    }
+  };
+
   // Manual refresh of data
   const handleRefresh = async () => {
     setLoading(true);
@@ -306,6 +408,10 @@ const Trading = () => {
       const days = timeframe === "1d" ? 1 : timeframe === "7d" ? 7 : timeframe === "30d" ? 30 : 90;
       const historicalData = await fetchCryptoHistoricalData(selectedAsset.id, days);
       setChartData(historicalData);
+      
+      // Recalculate positions with fresh data
+      calculatePositions(orders);
+      
       toast.success("Market data refreshed");
     } catch (error) {
       console.error("Error refreshing data:", error);
@@ -462,6 +568,7 @@ const Trading = () => {
                 userBalance={userBalance}
                 onTradeComplete={handleShortTermTradeComplete}
                 onBalanceUpdate={handleBalanceUpdate}
+                onTradeActivation={handleTradeActivation}
               />
             )}
           </div>
@@ -480,6 +587,7 @@ const Trading = () => {
                       <th className="text-right py-2 font-medium">Avg. Price</th>
                       <th className="text-right py-2 font-medium">Current Price</th>
                       <th className="text-right py-2 font-medium">P&L</th>
+                      <th className="text-right py-2 font-medium">Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -496,6 +604,11 @@ const Trading = () => {
                         ? (currentPrice - avgPrice) * position.quantity
                         : (avgPrice - currentPrice) * Math.abs(position.quantity);
                       
+                      // Calculate P&L percentage
+                      const pnlPercent = Math.abs(position.totalCost) > 0
+                        ? (pnl / Math.abs(position.totalCost)) * 100
+                        : 0;
+                      
                       return (
                         <tr key={index} className="border-b border-border/20 hover:bg-secondary/5">
                           <td className="py-2">{position.symbol}</td>
@@ -503,7 +616,7 @@ const Trading = () => {
                             {isLong ? 'Long' : 'Short'}
                           </td>
                           <td className="py-2 text-right font-mono">
-                            {Math.abs(position.quantity).toFixed(4)}
+                            {Math.abs(position.quantity).toFixed(8)}
                           </td>
                           <td className="py-2 text-right font-mono">
                             ${avgPrice.toFixed(2)}
@@ -512,7 +625,22 @@ const Trading = () => {
                             ${currentPrice.toFixed(2)}
                           </td>
                           <td className={`py-2 text-right font-mono ${pnl >= 0 ? 'text-success' : 'text-destructive'}`}>
-                            ${pnl.toFixed(2)}
+                            ${pnl.toFixed(2)} ({pnlPercent.toFixed(2)}%)
+                          </td>
+                          <td className="py-2 text-right">
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => handleOpenCloseModal({
+                                ...position,
+                                currentPrice,
+                                pnl,
+                                pnlPercent
+                              })}
+                            >
+                              Close
+                            </Button>
                           </td>
                         </tr>
                       );
@@ -574,7 +702,7 @@ const Trading = () => {
                             ${order.price.toFixed(2)}
                           </td>
                           <td className="py-2 text-right font-mono">
-                            {isShortTerm ? '$' + order.total.toFixed(2) : order.quantity.toFixed(4)}
+                            {isShortTerm ? '$' + order.total.toFixed(2) : order.quantity.toFixed(8)}
                           </td>
                           <td className="py-2 text-right font-mono">
                             ${order.total.toFixed(2)}
@@ -630,11 +758,21 @@ const Trading = () => {
                 userBalance={userBalance}
                 onTradeComplete={handleShortTermTradeComplete}
                 onBalanceUpdate={handleBalanceUpdate}
+                onTradeActivation={handleTradeActivation}
               />
             )}
           </div>
         </div>
       </div>
+
+      {/* Position close modal */}
+      <PositionCloseModal
+        isOpen={isCloseModalOpen}
+        onClose={() => setIsCloseModalOpen(false)}
+        position={selectedPosition}
+        currentPrice={marketData?.price || 0}
+        onPositionClosed={handlePositionClosed}
+      />
     </div>
   );
 };

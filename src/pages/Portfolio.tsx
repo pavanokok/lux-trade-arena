@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowUp, ArrowDown, RefreshCcw, Loader2, AlertCircle } from "lucide-react";
@@ -13,6 +14,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { Trade, Position } from "@/types/trade";
+import PositionCloseModal from "@/components/trading/PositionCloseModal";
 
 const Portfolio = () => {
   const [positions, setPositions] = useState<Position[]>([]);
@@ -23,6 +25,10 @@ const Portfolio = () => {
   const [totalPnlPercent, setTotalPnlPercent] = useState(0);
   const [recentTrades, setRecentTrades] = useState<Trade[]>([]);
   const navigate = useNavigate();
+  
+  // Position close modal
+  const [isCloseModalOpen, setIsCloseModalOpen] = useState(false);
+  const [selectedPosition, setSelectedPosition] = useState<Position | null>(null);
   
   useEffect(() => {
     const checkUser = async () => {
@@ -103,11 +109,15 @@ const Portfolio = () => {
       totalCost: number,
       type: 'long' | 'short',
       assetType: AssetType,
-      entryTimestamp?: string
+      entryTimestamp?: string,
+      tradeIds: string[]
     }>();
     
     // Process trades to build positions
     for (const trade of positionTrades) {
+      // Skip closed trades
+      if (trade.is_closed) continue;
+      
       const symbol = trade.symbol;
       const mapKey = `${symbol}-${trade.type === 'buy' || trade.type === 'cover' ? 'long' : 'short'}`;
       
@@ -124,11 +134,17 @@ const Portfolio = () => {
           totalCost: 0,
           type: trade.type === 'buy' || trade.type === 'cover' ? 'long' : 'short',
           assetType,
-          entryTimestamp: trade.created_at
+          entryTimestamp: trade.created_at,
+          tradeIds: []
         });
       }
       
       const position = posMap.get(mapKey)!;
+      
+      // Add trade ID to this position
+      if (!position.tradeIds.includes(trade.id)) {
+        position.tradeIds.push(trade.id);
+      }
       
       if (trade.type === 'buy') {
         position.quantity += trade.quantity;
@@ -205,7 +221,8 @@ const Portfolio = () => {
           pnlPercent,
           type: position.type,
           assetType: position.assetType,
-          entryTimestamp: position.entryTimestamp
+          entryTimestamp: position.entryTimestamp,
+          tradeIds: position.tradeIds
         });
       } catch (error) {
         console.error(`Error processing position for ${position.symbol}:`, error);
@@ -221,7 +238,8 @@ const Portfolio = () => {
           pnlPercent: 0,
           type: position.type,
           assetType: position.assetType,
-          entryTimestamp: position.entryTimestamp
+          entryTimestamp: position.entryTimestamp,
+          tradeIds: position.tradeIds
         });
       }
     }
@@ -242,6 +260,27 @@ const Portfolio = () => {
       setRefreshing(false);
     }
   };
+
+  // Handle opening the close position modal
+  const handleOpenCloseModal = (position: Position) => {
+    setSelectedPosition(position);
+    setIsCloseModalOpen(true);
+  };
+
+  // Handle position close completion
+  const handlePositionClosed = () => {
+    fetchUserPortfolio();
+  };
+
+  // Filter trades for history display
+  const getCompletedTrades = useCallback(() => {
+    // Return trades that are closed or short-term trades
+    return recentTrades.filter(trade => 
+      trade.is_closed || 
+      trade.type === 'short_term_up' || 
+      trade.type === 'short_term_down'
+    );
+  }, [recentTrades]);
 
   return (
     <div className="container px-4 mx-auto py-6 lg:py-8">
@@ -308,7 +347,9 @@ const Portfolio = () => {
           {loading ? (
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="grid grid-cols-5 gap-4">
+                <div key={i} className="grid grid-cols-7 gap-4">
+                  <div className="h-8 bg-secondary/40 rounded animate-pulse"></div>
+                  <div className="h-8 bg-secondary/40 rounded animate-pulse"></div>
                   <div className="h-8 bg-secondary/40 rounded animate-pulse"></div>
                   <div className="h-8 bg-secondary/40 rounded animate-pulse"></div>
                   <div className="h-8 bg-secondary/40 rounded animate-pulse"></div>
@@ -336,6 +377,7 @@ const Portfolio = () => {
                     <th className="text-right py-3 font-medium">Current Price</th>
                     <th className="text-right py-3 font-medium">Value</th>
                     <th className="text-right py-3 font-medium">P&L</th>
+                    <th className="text-right py-3 font-medium">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -358,7 +400,7 @@ const Portfolio = () => {
                         {position.type === 'long' ? 'LONG' : 'SHORT'}
                       </td>
                       <td className="text-right py-3 font-mono">
-                        {Math.abs(position.quantity).toFixed(position.quantity < 1 ? 6 : 2)}
+                        {Math.abs(position.quantity).toFixed(position.quantity < 1 ? 8 : 4)}
                       </td>
                       <td className="text-right py-3 font-mono">
                         {formatPrice(position.avgBuyPrice)}
@@ -369,12 +411,12 @@ const Portfolio = () => {
                         ) : (
                           <div className="flex items-center justify-end text-amber-500">
                             <AlertCircle className="h-3 w-3 mr-1" />
-                            <span>Live price unavailable</span>
+                            <span>Refreshing...</span>
                           </div>
                         )}
                       </td>
                       <td className="text-right py-3 font-mono">
-                        {position.currentPrice !== null ? formatPrice(position.totalValue) : 'Not calculated'}
+                        {position.currentPrice !== null ? formatPrice(position.totalValue) : 'Loading...'}
                       </td>
                       <td className={`text-right py-3 ${position.pnl >= 0 ? 'text-success' : 'text-destructive'}`}>
                         {position.currentPrice !== null ? (
@@ -386,7 +428,17 @@ const Portfolio = () => {
                             )}
                             {formatPrice(position.pnl)} ({formatPercentage(position.pnlPercent)})
                           </div>
-                        ) : 'Not calculated'}
+                        ) : 'Loading...'}
+                      </td>
+                      <td className="text-right py-3">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-destructive hover:bg-destructive/10"
+                          onClick={() => handleOpenCloseModal(position)}
+                        >
+                          Close
+                        </Button>
                       </td>
                     </tr>
                   ))}
@@ -397,11 +449,11 @@ const Portfolio = () => {
         </CardContent>
       </Card>
 
-      {recentTrades.length > 0 && (
+      {getCompletedTrades().length > 0 && (
         <Card className="border-border/40 bg-secondary/10 backdrop-blur-sm">
           <CardHeader>
-            <CardTitle>Recent Trades</CardTitle>
-            <CardDescription>Your recent trading activity</CardDescription>
+            <CardTitle>Trade History</CardTitle>
+            <CardDescription>Your completed trades</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -410,19 +462,24 @@ const Portfolio = () => {
                   <tr className="border-b border-border/40">
                     <th className="text-left py-3 font-medium">Type</th>
                     <th className="text-left py-3 font-medium">Symbol</th>
-                    <th className="text-right py-3 font-medium">Price</th>
-                    <th className="text-right py-3 font-medium">Amount</th>
-                    <th className="text-right py-3 font-medium">Total</th>
+                    <th className="text-right py-3 font-medium">Entry Price</th>
+                    <th className="text-right py-3 font-medium">Exit Price</th>
+                    <th className="text-right py-3 font-medium">Quantity</th>
+                    <th className="text-right py-3 font-medium">P&L</th>
                     <th className="text-right py-3 font-medium">Date</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {recentTrades.map((trade) => (
+                  {getCompletedTrades().map((trade) => (
                     <tr key={trade.id} className="border-b border-border/20 hover:bg-secondary/5">
                       <td className={`py-2 ${
-                        trade.type === 'buy' || trade.type === 'cover' ? 'text-success' : 'text-destructive'
+                        trade.type === 'buy' || trade.type === 'short_term_up' ? 'text-success' : 
+                        trade.type === 'sell' || trade.type === 'short_term_down' ? 'text-destructive' :
+                        trade.type === 'short' ? 'text-destructive' : 'text-success'
                       }`}>
-                        {trade.type === 'buy' ? 'Buy' : 
+                        {trade.type === 'short_term_up' ? 'UP' : 
+                         trade.type === 'short_term_down' ? 'DOWN' :
+                         trade.type === 'buy' ? 'Buy' : 
                          trade.type === 'sell' ? 'Sell' :
                          trade.type === 'short' ? 'Short' : 'Cover'}
                       </td>
@@ -431,13 +488,18 @@ const Portfolio = () => {
                         {formatPrice(trade.price)}
                       </td>
                       <td className="py-2 text-right font-mono">
-                        {trade.quantity.toFixed(4)}
+                        {trade.close_price ? formatPrice(trade.close_price) : '-'}
                       </td>
                       <td className="py-2 text-right font-mono">
-                        {formatPrice(trade.total)}
+                        {trade.quantity.toFixed(8)}
+                      </td>
+                      <td className={`py-2 text-right font-mono ${
+                        (trade.realized_pnl || 0) >= 0 ? 'text-success' : 'text-destructive'
+                      }`}>
+                        {trade.realized_pnl !== undefined ? formatPrice(trade.realized_pnl) : '-'}
                       </td>
                       <td className="py-2 text-right">
-                        {new Date(trade.created_at).toLocaleDateString()} {new Date(trade.created_at).toLocaleTimeString()}
+                        {new Date(trade.created_at).toLocaleDateString()}
                       </td>
                     </tr>
                   ))}
@@ -447,6 +509,15 @@ const Portfolio = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* Position close modal */}
+      <PositionCloseModal
+        isOpen={isCloseModalOpen}
+        onClose={() => setIsCloseModalOpen(false)}
+        position={selectedPosition}
+        currentPrice={selectedPosition?.currentPrice || 0}
+        onPositionClosed={handlePositionClosed}
+      />
     </div>
   );
 };

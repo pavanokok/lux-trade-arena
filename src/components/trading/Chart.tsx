@@ -33,6 +33,7 @@ const Chart = ({
   const [chartDimensions, setChartDimensions] = useState({ width: 0, height: 0 });
   const [visibleRange, setVisibleRange] = useState({ minTime: 0, maxTime: 0, minPrice: 0, maxPrice: 0 });
   const chartRef = useRef<IChartApi | null>(null);
+  const prevActiveTradeIdRef = useRef<string | null>(null);
 
   // Chart colors based on theme
   const backgroundColor = darkMode ? '#131722' : '#FFFFFF';
@@ -171,6 +172,11 @@ const Chart = ({
   // Update the line series with live price if available and only if there's an active trade
   useEffect(() => {
     if (lineSeries && data.length > 0 && livePrice) {
+      // Track if active trade changed
+      const activeTradeId = activeTrade?.id || null;
+      const activeTradeChanged = activeTradeId !== prevActiveTradeIdRef.current;
+      prevActiveTradeIdRef.current = activeTradeId;
+      
       // Only show the line if there's an active trade
       if (activeTrade) {
         // Create a line that spans across the visible chart area
@@ -215,12 +221,14 @@ const Chart = ({
           lastValueVisible: true,
         });
       } else {
-        // Clear the line if there's no active trade
-        lineSeries.setData([]);
-        lineSeries.applyOptions({
-          priceLineVisible: false,
-          lastValueVisible: false,
-        });
+        // Clear the line if there's no active trade or trade changed
+        if (activeTradeChanged) {
+          lineSeries.setData([]);
+          lineSeries.applyOptions({
+            priceLineVisible: false,
+            lastValueVisible: false,
+          });
+        }
       }
     }
   }, [lineSeries, livePrice, data, chart, activeTrade]);
@@ -230,10 +238,10 @@ const Chart = ({
 
   return (
     <div>
-      <div className="mb-4">
+      <div className="mb-4 flex justify-between items-center">
         <h3 className="text-lg font-medium">{symbol} Price Chart</h3>
         {livePrice && (
-          <div className="text-xl font-mono font-medium">
+          <div className="text-xl font-mono font-medium animate-pulse">
             ${livePrice.toFixed(2)}
           </div>
         )}

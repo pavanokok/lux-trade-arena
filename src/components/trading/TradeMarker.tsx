@@ -2,6 +2,7 @@
 import { useMemo } from 'react';
 import { Trade } from '@/types/trade';
 import { formatPrice } from '@/utils/marketData';
+import { ArrowUp, ArrowDown } from 'lucide-react';
 
 interface TradeMarkerProps {
   trade: Trade;
@@ -56,6 +57,11 @@ const TradeMarker = ({
     ? (trade.realized_pnl / trade.total) * 100 
     : 0;
   
+  // Format the trade result text
+  const resultText = isWin 
+    ? `+${formatPrice(trade.realized_pnl || 0)} (${profitPercent.toFixed(1)}%)`
+    : `-${formatPrice(Math.abs(trade.realized_pnl || 0))} (${profitPercent.toFixed(1)}%)`;
+  
   return (
     <div 
       className="absolute pointer-events-none animate-fade-in" 
@@ -73,11 +79,11 @@ const TradeMarker = ({
       <div 
         className={`absolute transform -translate-x-1/2 px-2 py-1 rounded text-xs font-bold ${
           isWin ? 'bg-success/70 text-success-foreground' : 'bg-destructive/70 text-destructive-foreground'
-        } animate-scale-in`}
+        } animate-scale-in flex items-center`}
         style={{ top: `${yPosition}px` }}
       >
-        {isWin ? 'WIN' : 'LOSS'} {formatPrice(trade.realized_pnl || 0)} 
-        <span className="ml-1">({profitPercent.toFixed(1)}%)</span>
+        {isWin ? <ArrowUp className="h-3 w-3 mr-1" /> : <ArrowDown className="h-3 w-3 mr-1" />}
+        {resultText}
       </div>
     </div>
   );
