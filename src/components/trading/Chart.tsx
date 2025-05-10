@@ -13,9 +13,19 @@ interface ChartProps {
   symbol: string;
   trades?: Trade[];
   livePrice?: number;
+  activeTrade?: Trade | null;
 }
 
-const Chart = ({ data, width = '100%', height = 400, darkMode = true, symbol, trades = [], livePrice }: ChartProps) => {
+const Chart = ({ 
+  data, 
+  width = '100%', 
+  height = 400, 
+  darkMode = true, 
+  symbol, 
+  trades = [], 
+  livePrice,
+  activeTrade
+}: ChartProps) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const [chart, setChart] = useState<IChartApi | null>(null);
   const [series, setSeries] = useState<ISeriesApi<"Candlestick"> | null>(null);
@@ -158,52 +168,65 @@ const Chart = ({ data, width = '100%', height = 400, darkMode = true, symbol, tr
     }
   }, [series, data, chart]);
 
-  // Update the line series with live price if available
+  // Update the line series with live price if available and only if there's an active trade
   useEffect(() => {
     if (lineSeries && data.length > 0 && livePrice) {
-      // Create a line that spans across the visible chart area
-      const now = Math.floor(Date.now() / 1000);
-      const lineData: LineData[] = [];
-      
-      // If we have chart data, use its time range
-      if (data.length > 1) {
-        const firstCandle = data[0];
-        const firstTime = typeof firstCandle.time === 'number' ? 
-          firstCandle.time : Number(firstCandle.time);
+      // Only show the line if there's an active trade
+      if (activeTrade) {
+        // Create a line that spans across the visible chart area
+        const now = Math.floor(Date.now() / 1000);
+        const lineData: LineData[] = [];
+        
+        // If we have chart data, use its time range
+        if (data.length > 1) {
+          const firstCandle = data[0];
+          const firstTime = typeof firstCandle.time === 'number' ? 
+            firstCandle.time : Number(firstCandle.time);
+            
+          const firstPoint = {
+            time: firstTime as Time,
+            value: livePrice
+          };
           
-        const firstPoint = {
-          time: firstTime as Time,
-          value: livePrice
-        };
-        
-        const lastPoint = {
-          time: now as Time,
-          value: livePrice
-        };
-        
-        // Add points to create a horizontal line at the current price
-        lineData.push(firstPoint, lastPoint);
-        
-        // Highlight the current price
-        if (chart) {
-          chart.priceScale('right').applyOptions({
-            scaleMargins: {
-              top: 0.1,
-              bottom: 0.2,
-            },
-          });
+          const lastPoint = {
+            time: now as Time,
+            value: livePrice
+          };
+          
+          // Add points to create a horizontal line at the current price
+          lineData.push(firstPoint, lastPoint);
+          
+          // Highlight the current price
+          if (chart) {
+            chart.priceScale('right').applyOptions({
+              scaleMargins: {
+                top: 0.1,
+                bottom: 0.2,
+              },
+            });
+          }
         }
+        
+        lineSeries.setData(lineData);
+        
+        // Set price line to show current price more visibly
+        lineSeries.applyOptions({
+          priceLineVisible: true,
+          lastValueVisible: true,
+        });
+      } else {
+        // Clear the line if there's no active trade
+        lineSeries.setData([]);
+        lineSeries.applyOptions({
+          priceLineVisible: false,
+          lastValueVisible: false,
+        });
       }
-      
-      lineSeries.setData(lineData);
-      
-      // Set price line to show current price more visibly
-      lineSeries.applyOptions({
-        priceLineVisible: true,
-        lastValueVisible: true,
-      });
     }
-  }, [lineSeries, livePrice, data, chart]);
+  }, [lineSeries, livePrice, data, chart, activeTrade]);
+
+  // Show active trade entry price and current position
+  const activeTradeEntryPrice = activeTrade?.price || null;
 
   return (
     <div>
@@ -220,6 +243,20 @@ const Chart = ({ data, width = '100%', height = 400, darkMode = true, symbol, tr
         className="rounded-lg border border-border/40 bg-secondary/10 overflow-hidden relative"
         style={{ height }}
       >
+        {/* Active trade entry price indicator */}
+        {activeTradeEntryPrice && (
+          <div 
+            className="absolute left-0 right-0 border-dashed border-b border-yellow-400 z-10 flex justify-end animate-fade-in"
+            style={{ 
+              top: `${chartDimensions.height * (1 - ((activeTradeEntryPrice - (visibleRange.minPrice || 0)) / ((visibleRange.maxPrice || activeTradeEntryPrice * 1.1) - (visibleRange.minPrice || 0))))}px`
+            }}
+          >
+            <div className="bg-yellow-400 px-2 py-0.5 text-xs font-mono text-black">
+              Entry: ${activeTradeEntryPrice.toFixed(2)}
+            </div>
+          </div>
+        )}
+        
         {/* Trade markers overlay */}
         {trades && trades.length > 0 && visibleRange.minTime > 0 && (
           <div className="absolute inset-0 pointer-events-none">

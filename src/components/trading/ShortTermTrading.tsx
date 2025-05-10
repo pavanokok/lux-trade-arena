@@ -59,7 +59,7 @@ const ShortTermTrading = ({
     }
   }, [currentPrice]);
   
-  // Calculate live P&L for active trades
+  // Calculate live P&L for active trades - ACCURATE TRADING LOGIC
   const calculateLivePnL = useCallback((price: number) => {
     if (!activeTrade || !entryPrice) return;
     
@@ -70,8 +70,8 @@ const ShortTermTrading = ({
     const isUp = activeTrade.type === "short_term_up";
     const priceDiff = price - entryPrice;
     
-    // If direction is UP, profit when price increases
-    // If direction is DOWN, profit when price decreases
+    // For UP trades: profit when price increases
+    // For DOWN trades: profit when price decreases
     const pnl = isUp ? priceDiff * lotSize : -priceDiff * lotSize;
     
     // Calculate P&L percentage relative to the initial investment
@@ -104,10 +104,10 @@ const ShortTermTrading = ({
       id: uuidv4(),
       user_id: "", // Will be filled by supabase
       symbol: symbol,
-      quantity: lotSize, // Now storing actual lot size
-      price: exactPrice,
+      quantity: lotSize, // Store actual lot size
+      price: exactPrice, // Save the exact entry price
       total: amount,
-      type: direction === "up" ? "short_term_up" : "short_term_down", // Ensure correct direction
+      type: direction === "up" ? "short_term_up" : "short_term_down", // Store the exact direction
       order_type: "short_term",
       created_at: new Date().toISOString(),
       entry_timestamp: new Date().toISOString(),
@@ -178,19 +178,20 @@ const ShortTermTrading = ({
       // Calculate lot size (how many units were purchased)
       const lotSize = activeTrade.total / entryPrice;
       
-      // Determine if the trade was a win or loss
+      // Determine if the trade was a win or loss based on the direction and price movement
       const isUp = activeTrade.type === "short_term_up";
       const priceDiff = closePrice - entryPrice;
       
       // Calculate profit/loss based on direction and price movement
-      // If UP and price increased OR DOWN and price decreased = win
+      // For UP trades: profit when price increases
+      // For DOWN trades: profit when price decreases
       const profit = isUp ? priceDiff * lotSize : -priceDiff * lotSize;
       
       // Determine win/loss status
       const isWin = (isUp && priceDiff > 0) || (!isUp && priceDiff < 0);
       
       // Calculate new balance: original balance + profit (or loss)
-      const newBalance = userBalance + profit;
+      const newBalance = userBalance + activeTrade.total + profit;
 
       // Update the trade
       const completedTrade: Trade = {

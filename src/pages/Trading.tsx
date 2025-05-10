@@ -215,6 +215,9 @@ const Trading = () => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  // Make sure we have a reference to the active trade for the Chart component
+  const [activeTrade, setActiveTrade] = useState<Trade | null>(null);
+  
   // Handle order placement
   const handlePlaceOrder = async (order: Trade) => {
     const { data: sessionData } = await supabase.auth.getSession();
@@ -279,11 +282,18 @@ const Trading = () => {
   // Handle completed short-term trade
   const handleShortTermTradeComplete = (trade: Trade) => {
     setOrders((prev) => [trade, ...prev]);
+    // When a trade completes, clear the active trade reference
+    setActiveTrade(null);
   };
 
   // Update user balance
   const handleBalanceUpdate = (newBalance: number) => {
     setUserBalance(newBalance);
+  };
+
+  // Handle short-term trade activation
+  const handleTradeActivation = (trade: Trade | null) => {
+    setActiveTrade(trade);
   };
 
   // Manual refresh of data
@@ -428,7 +438,8 @@ const Trading = () => {
                 height={400} 
                 symbol={selectedAsset.symbol} 
                 trades={orders.filter(o => o.symbol === selectedAsset.symbol)}
-                livePrice={marketData?.price} 
+                livePrice={marketData?.price}
+                activeTrade={activeTrade} 
               />
             )}
           </div>

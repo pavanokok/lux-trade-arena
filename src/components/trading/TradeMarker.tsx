@@ -58,7 +58,7 @@ const TradeMarker = ({
   
   return (
     <div 
-      className="absolute pointer-events-none" 
+      className="absolute pointer-events-none animate-fade-in" 
       style={{ 
         left: `${xPosition}px`, 
         top: 0,
@@ -67,13 +67,13 @@ const TradeMarker = ({
       }}
     >
       {/* Vertical marker line */}
-      <div className="w-px h-full bg-yellow-500 opacity-70" />
+      <div className="w-0.5 h-full bg-yellow-500 opacity-70" />
       
       {/* Trade result indicator */}
       <div 
         className={`absolute transform -translate-x-1/2 px-2 py-1 rounded text-xs font-bold ${
           isWin ? 'bg-success/70 text-success-foreground' : 'bg-destructive/70 text-destructive-foreground'
-        }`}
+        } animate-scale-in`}
         style={{ top: `${yPosition}px` }}
       >
         {isWin ? 'WIN' : 'LOSS'} {formatPrice(trade.realized_pnl || 0)} 

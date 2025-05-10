@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -92,17 +91,23 @@ const Portfolio = () => {
   };
 
   const processTradesIntoPositions = async (trades: Trade[]): Promise<Position[]> => {
+    // Filter out short-term trades as they don't affect positions
+    const positionTrades = trades.filter(
+      trade => !["short_term_up", "short_term_down"].includes(trade.type)
+    );
+    
     const posMap = new Map<string, { 
       symbol: string,
       name: string,
       quantity: number, 
       totalCost: number,
       type: 'long' | 'short',
-      assetType: AssetType
+      assetType: AssetType,
+      entryTimestamp?: string
     }>();
     
     // Process trades to build positions
-    for (const trade of trades) {
+    for (const trade of positionTrades) {
       const symbol = trade.symbol;
       const mapKey = `${symbol}-${trade.type === 'buy' || trade.type === 'cover' ? 'long' : 'short'}`;
       
@@ -118,7 +123,8 @@ const Portfolio = () => {
           quantity: 0,
           totalCost: 0,
           type: trade.type === 'buy' || trade.type === 'cover' ? 'long' : 'short',
-          assetType
+          assetType,
+          entryTimestamp: trade.created_at
         });
       }
       
@@ -127,6 +133,9 @@ const Portfolio = () => {
       if (trade.type === 'buy') {
         position.quantity += trade.quantity;
         position.totalCost += trade.total;
+        if (!position.entryTimestamp || new Date(trade.created_at) < new Date(position.entryTimestamp)) {
+          position.entryTimestamp = trade.created_at;
+        }
       } 
       else if (trade.type === 'sell') {
         position.quantity -= trade.quantity;
@@ -135,6 +144,9 @@ const Portfolio = () => {
       else if (trade.type === 'short') {
         position.quantity -= trade.quantity; // Negative for shorts
         position.totalCost += trade.total; // Money received
+        if (!position.entryTimestamp || new Date(trade.created_at) < new Date(position.entryTimestamp)) {
+          position.entryTimestamp = trade.created_at;
+        }
       }
       else if (trade.type === 'cover') {
         position.quantity += trade.quantity; // Reducing the short position
@@ -151,47 +163,67 @@ const Portfolio = () => {
     
     // Convert to Position objects with current prices
     const positions: Position[] = [];
+    
     for (const position of posMap.values()) {
       // Skip positions with zero quantity
       if (Math.abs(position.quantity) < 0.00000001) continue;
       
-      // Fetch current price for the asset
-      const currentPrice = await getAssetCurrentPrice(position.symbol.toLowerCase());
-      
-      const avgBuyPrice = Math.abs(position.quantity) > 0 ? 
-        Math.abs(position.totalCost / position.quantity) : 0;
-      
-      let totalValue = 0;
-      let pnl = 0;
-      let pnlPercent = 0;
-      
-      if (currentPrice !== null) {
-        if (position.type === 'long') {
-          totalValue = position.quantity * currentPrice;
-          pnl = totalValue - position.totalCost;
-          pnlPercent = position.totalCost > 0 ? (pnl / position.totalCost) * 100 : 0;
-        } else {
-          // For short positions
-          const originalValue = Math.abs(position.quantity) * avgBuyPrice;
-          const currentValue = Math.abs(position.quantity) * currentPrice;
-          totalValue = currentValue;
-          pnl = originalValue - currentValue; // Profit if current value is less than original
-          pnlPercent = originalValue > 0 ? (pnl / originalValue) * 100 : 0;
+      try {
+        // Fetch current price for the asset - with better error handling
+        const currentPrice = await getAssetCurrentPrice(position.symbol);
+        
+        const avgBuyPrice = Math.abs(position.quantity) > 0 ? 
+          Math.abs(position.totalCost / position.quantity) : 0;
+        
+        let totalValue = 0;
+        let pnl = 0;
+        let pnlPercent = 0;
+        
+        if (currentPrice !== null) {
+          if (position.type === 'long') {
+            totalValue = position.quantity * currentPrice;
+            pnl = totalValue - position.totalCost;
+            pnlPercent = position.totalCost > 0 ? (pnl / position.totalCost) * 100 : 0;
+          } else {
+            // For short positions
+            const originalValue = Math.abs(position.quantity) * avgBuyPrice;
+            const currentValue = Math.abs(position.quantity) * currentPrice;
+            totalValue = currentValue;
+            pnl = originalValue - currentValue; // Profit if current value is less than original
+            pnlPercent = originalValue > 0 ? (pnl / originalValue) * 100 : 0;
+          }
         }
+        
+        positions.push({
+          symbol: position.symbol,
+          name: position.name,
+          quantity: position.quantity,
+          avgBuyPrice,
+          currentPrice,
+          totalValue,
+          pnl,
+          pnlPercent,
+          type: position.type,
+          assetType: position.assetType,
+          entryTimestamp: position.entryTimestamp
+        });
+      } catch (error) {
+        console.error(`Error processing position for ${position.symbol}:`, error);
+        // Add the position with null price to still show it in the UI
+        positions.push({
+          symbol: position.symbol,
+          name: position.name,
+          quantity: position.quantity,
+          avgBuyPrice: Math.abs(position.totalCost / position.quantity),
+          currentPrice: null,
+          totalValue: 0,
+          pnl: 0,
+          pnlPercent: 0,
+          type: position.type,
+          assetType: position.assetType,
+          entryTimestamp: position.entryTimestamp
+        });
       }
-      
-      positions.push({
-        symbol: position.symbol,
-        name: position.name,
-        quantity: position.quantity,
-        avgBuyPrice,
-        currentPrice,
-        totalValue,
-        pnl,
-        pnlPercent,
-        type: position.type,
-        assetType: position.assetType
-      });
     }
     
     return positions;
