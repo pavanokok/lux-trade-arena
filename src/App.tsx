@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Session, User } from "@supabase/supabase-js";
+import { Helmet } from "react-helmet-async";
 
 import Navbar from "./components/layout/Navbar";
 import Footer from "./components/layout/Footer";
@@ -52,6 +53,10 @@ const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
+        <Helmet>
+          <title>Phoenix - Premium Trading Platform</title>
+          <meta name="description" content="Phoenix is a premium trading platform for trading cryptocurrencies and stocks with professional tools and real-time market data." />
+        </Helmet>
         <Toaster />
         <Sonner />
         <BrowserRouter>

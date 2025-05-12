@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -16,23 +15,30 @@ import { Card } from "@/components/ui/card";
 import { Trade } from "@/types/trade";
 import { supabase } from "@/integrations/supabase/client";
 import PositionCloseModal from "@/components/trading/PositionCloseModal";
+import { Helmet } from "react-helmet-async";
 
 const AVAILABLE_ASSETS = [
+  // Cryptocurrencies
   { id: "bitcoin", symbol: "BTC", name: "Bitcoin", type: "crypto" },
   { id: "ethereum", symbol: "ETH", name: "Ethereum", type: "crypto" },
   { id: "solana", symbol: "SOL", name: "Solana", type: "crypto" },
   { id: "cardano", symbol: "ADA", name: "Cardano", type: "crypto" },
   { id: "ripple", symbol: "XRP", name: "XRP", type: "crypto" },
   { id: "polkadot", symbol: "DOT", name: "Polkadot", type: "crypto" },
-  { id: "tesla", symbol: "TSLA", name: "Tesla", type: "stock" },
-  { id: "apple", symbol: "AAPL", name: "Apple", type: "stock" },
-  { id: "microsoft", symbol: "MSFT", name: "Microsoft", type: "stock" },
-  { id: "tcs", symbol: "TCS", name: "Tata Consultancy Services", type: "stock" },
-  { id: "infosys", symbol: "INFY", name: "Infosys", type: "stock" },
-  { id: "hsbc", symbol: "HSBC", name: "HSBC Holdings", type: "stock" },
-  { id: "bp", symbol: "BP", name: "BP plc", type: "stock" },
-  { id: "sony", symbol: "SONY", name: "Sony Group", type: "stock" },
-  { id: "toyota", symbol: "TM", name: "Toyota Motor", type: "stock" },
+  { id: "binancecoin", symbol: "BNB", name: "Binance Coin", type: "crypto" },
+  { id: "dogecoin", symbol: "DOGE", name: "Dogecoin", type: "crypto" },
+  
+  // Stocks
+  { id: "apple", symbol: "AAPL", name: "Apple Inc.", type: "stock" },
+  { id: "microsoft", symbol: "MSFT", name: "Microsoft Corporation", type: "stock" },
+  { id: "amazon", symbol: "AMZN", name: "Amazon.com, Inc.", type: "stock" },
+  { id: "tesla", symbol: "TSLA", name: "Tesla, Inc.", type: "stock" },
+  { id: "google", symbol: "GOOGL", name: "Alphabet Inc.", type: "stock" },
+  { id: "meta", symbol: "META", name: "Meta Platforms, Inc.", type: "stock" },
+  { id: "nvidia", symbol: "NVDA", name: "NVIDIA Corporation", type: "stock" },
+  { id: "jpmorgan", symbol: "JPM", name: "JPMorgan Chase & Co.", type: "stock" },
+  { id: "visa", symbol: "V", name: "Visa Inc.", type: "stock" },
+  { id: "walmart", symbol: "WMT", name: "Walmart Inc.", type: "stock" }
 ];
 
 const Trading = () => {
@@ -49,6 +55,7 @@ const Trading = () => {
   );
   const [timeframe, setTimeframe] = useState("7d");
   const [tradingMode, setTradingMode] = useState("spot");
+  const [assetType, setAssetType] = useState<"crypto" | "stock">("crypto");
   
   // Market data states
   const [marketData, setMarketData] = useState<MarketData | null>(null);
@@ -69,6 +76,9 @@ const Trading = () => {
 
   // Active trade for chart visualization
   const [activeTrade, setActiveTrade] = useState<Trade | null>(null);
+
+  // Filter assets by type
+  const filteredAssets = AVAILABLE_ASSETS.filter(asset => asset.type === assetType);
 
   // Update URL when selected asset changes
   useEffect(() => {
@@ -239,10 +249,13 @@ const Trading = () => {
     return () => clearInterval(intervalId);
   }, [selectedAsset, calculatePositions, orders]);
 
-  // Fetch historical data for charts
+  // Fetch historical data for charts with proper time intervals
   useEffect(() => {
     const fetchHistorical = async () => {
-      const days = timeframe === "1d" ? 1 : timeframe === "7d" ? 7 : timeframe === "30d" ? 30 : 90;
+      // Properly map the timeframe to days for accurate chart display
+      const days = timeframe === "1d" ? 1 : 
+                  timeframe === "7d" ? 7 : 
+                  timeframe === "30d" ? 30 : 90;
       
       try {
         const data = await fetchCryptoHistoricalData(selectedAsset.id, days);
@@ -255,6 +268,16 @@ const Trading = () => {
 
     fetchHistorical();
   }, [selectedAsset, timeframe]);
+
+  // Handle asset type change
+  const handleAssetTypeChange = (type: "crypto" | "stock") => {
+    setAssetType(type);
+    // Select the first asset of the chosen type
+    const firstAssetOfType = AVAILABLE_ASSETS.find(asset => asset.type === type);
+    if (firstAssetOfType) {
+      setSelectedAsset(firstAssetOfType);
+    }
+  };
 
   // Handle search input
   useEffect(() => {
@@ -423,6 +446,11 @@ const Trading = () => {
 
   return (
     <div className="container px-4 mx-auto py-6 lg:py-8">
+      <Helmet>
+        <title>Phoenix - Trading Platform</title>
+        <meta name="description" content="Trade cryptocurrencies and stocks with Phoenix's advanced trading platform featuring real-time data and professional tools." />
+      </Helmet>
+      
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
         <h1 className="text-3xl font-display font-bold">Trading Dashboard</h1>
         
@@ -468,6 +496,16 @@ const Trading = () => {
         </div>
       </div>
       
+      {/* Asset Type Selection */}
+      <div className="mb-4">
+        <Tabs value={assetType} onValueChange={(value: any) => handleAssetTypeChange(value)}>
+          <TabsList className="grid w-full sm:w-auto grid-cols-2 mb-4">
+            <TabsTrigger value="crypto">Cryptocurrencies</TabsTrigger>
+            <TabsTrigger value="stock">Stocks</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+      
       {/* Trading Mode Tabs */}
       <div className="mb-4">
         <Tabs value={tradingMode} onValueChange={setTradingMode} className="w-full">
@@ -483,7 +521,7 @@ const Trading = () => {
         <div className="lg:col-span-3 space-y-6">
           {/* Asset selector */}
           <div className="flex overflow-x-auto pb-2 gap-2">
-            {AVAILABLE_ASSETS.map((asset) => (
+            {filteredAssets.map((asset) => (
               <Button
                 key={asset.id}
                 variant={selectedAsset.id === asset.id ? "default" : "outline"}

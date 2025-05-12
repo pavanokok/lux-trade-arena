@@ -33,19 +33,19 @@ const HeroSection = () => {
             </Button>
           </div>
 
-          {/* Stats */}
+          {/* Stats - Updated with accurate values */}
           <div className="grid grid-cols-2 md:grid-cols-3 gap-8 mt-16 w-full">
             <div className="flex flex-col items-center p-4">
-              <span className="text-3xl md:text-4xl font-display font-bold text-accent mb-2">$4.2B+</span>
-              <span className="text-sm text-muted-foreground">Daily Trading Volume</span>
+              <span className="text-3xl md:text-4xl font-display font-bold text-accent mb-2">$12M+</span>
+              <span className="text-sm text-muted-foreground">Simulated Trading Volume</span>
             </div>
             <div className="flex flex-col items-center p-4">
-              <span className="text-3xl md:text-4xl font-display font-bold text-accent mb-2">240+</span>
-              <span className="text-sm text-muted-foreground">Global Markets</span>
+              <span className="text-3xl md:text-4xl font-display font-bold text-accent mb-2">25+</span>
+              <span className="text-sm text-muted-foreground">Global Assets</span>
             </div>
             <div className="flex flex-col items-center p-4 col-span-2 md:col-span-1">
-              <span className="text-3xl md:text-4xl font-display font-bold text-accent mb-2">10ms</span>
-              <span className="text-sm text-muted-foreground">Execution Speed</span>
+              <span className="text-3xl md:text-4xl font-display font-bold text-accent mb-2">Real-time</span>
+              <span className="text-sm text-muted-foreground">Simulated Execution</span>
             </div>
           </div>
         </div>

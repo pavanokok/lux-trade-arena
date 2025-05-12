@@ -29,6 +29,7 @@ const DURATIONS = [
 
 const MIN_AMOUNT = 5;
 const MAX_AMOUNT = 1000;
+const PAYOUT_PERCENTAGE = 80; // 80% payout for winning trades
 
 const ShortTermTrading = ({ 
   symbol, 
@@ -50,6 +51,7 @@ const ShortTermTrading = ({
   const [currentMarketPrice, setCurrentMarketPrice] = useState<number>(currentPrice);
   const [livePnL, setLivePnL] = useState<number>(0);
   const [livePnLPercent, setLivePnLPercent] = useState<number>(0);
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
 
   // Update current market price when currentPrice prop changes
   useEffect(() => {
@@ -65,16 +67,17 @@ const ShortTermTrading = ({
   const calculateLivePnL = useCallback((price: number) => {
     if (!activeTrade || !entryPrice) return;
     
-    // Calculate lot size (how many units were purchased)
-    const lotSize = activeTrade.total / entryPrice;
-    
-    // Calculate P&L based on direction
+    // Calculate P&L based on direction and fixed payout percentage
     const isUp = activeTrade.type === "short_term_up";
     const priceDiff = price - entryPrice;
     
     // For UP trades: profit when price increases
     // For DOWN trades: profit when price decreases
-    const pnl = isUp ? priceDiff * lotSize : -priceDiff * lotSize;
+    const isWinning = (isUp && priceDiff > 0) || (!isUp && priceDiff < 0);
+    
+    // If winning, profit is fixed percentage of amount (e.g., 80%)
+    // If losing, loss is full amount
+    const pnl = isWinning ? (activeTrade.total * PAYOUT_PERCENTAGE / 100) : -activeTrade.total;
     
     // Calculate P&L percentage relative to the initial investment
     const pnlPercent = (pnl / activeTrade.total) * 100;
@@ -85,6 +88,10 @@ const ShortTermTrading = ({
 
   // Handle trade initiation
   const initiateShortTermTrade = async (direction: "up" | "down") => {
+    if (isProcessing) {
+      return; // Prevent multiple clicks
+    }
+    
     if (userBalance < amount) {
       toast.error("Insufficient balance");
       return;
@@ -95,65 +102,74 @@ const ShortTermTrading = ({
       return;
     }
 
-    // Store the exact current price at the moment of trade creation
-    const exactPrice = currentPrice;
-    
-    // Calculate how many units/lots this amount buys
-    const lotSize = amount / exactPrice;
+    setIsProcessing(true);
 
-    // Create new trade with the exact price
-    const trade: Trade = {
-      id: uuidv4(),
-      user_id: "", // Will be filled by supabase
-      symbol: symbol,
-      quantity: lotSize, // Store actual lot size
-      price: exactPrice, // Save the exact entry price
-      total: amount,
-      type: direction === "up" ? "short_term_up" : "short_term_down", // Store the exact direction
-      order_type: "short_term",
-      created_at: new Date().toISOString(),
-      entry_timestamp: new Date().toISOString(),
-      is_closed: false,
-      duration_seconds: duration,
-      result: "pending"
-    };
-
-    // Start the countdown
-    setCountdown(duration);
-    setEntryPrice(exactPrice);
-    setActiveTrade(trade);
-    
-    // Notify parent component about active trade for chart visualization
-    onTradeActivation(trade);
-    
-    // Deduct the stake amount from user balance
-    const newBalance = userBalance - amount;
-    onBalanceUpdate(newBalance);
-    
-    // Calculate initial P&L (should be close to zero at entry)
-    calculateLivePnL(exactPrice);
-    
-    // Insert the trade into the database if user is logged in
-    const { data: session } = await supabase.auth.getSession();
-    
-    if (session?.session?.user) {
-      const userId = session.session.user.id;
+    try {
+      // Store the exact current price at the moment of trade creation
+      const exactPrice = currentPrice;
       
-      trade.user_id = userId;
+      // Calculate how many units/lots this amount buys
+      const lotSize = amount / exactPrice;
+  
+      // Create new trade with the exact price
+      const trade: Trade = {
+        id: uuidv4(),
+        user_id: "", // Will be filled by supabase
+        symbol: symbol,
+        quantity: lotSize, // Store actual lot size
+        price: exactPrice, // Save the exact entry price
+        total: amount,
+        type: direction === "up" ? "short_term_up" : "short_term_down", // Store the exact direction
+        order_type: "short_term",
+        created_at: new Date().toISOString(),
+        entry_timestamp: new Date().toISOString(),
+        is_closed: false,
+        duration_seconds: duration,
+        result: "pending"
+      };
+  
+      // Start the countdown
+      setCountdown(duration);
+      setEntryPrice(exactPrice);
+      setActiveTrade(trade);
       
-      const { error } = await supabase
-        .from('trades')
-        .insert([trade]);
+      // Notify parent component about active trade for chart visualization
+      onTradeActivation(trade);
+      
+      // Deduct the stake amount from user balance
+      const newBalance = userBalance - amount;
+      onBalanceUpdate(newBalance);
+      
+      // Show success toast
+      toast.success(`${direction.toUpperCase()} trade placed for $${amount}`, {
+        description: `Entry price: $${exactPrice.toFixed(2)}, Duration: ${duration} seconds`
+      });
+      
+      // Calculate initial P&L (should be close to zero at entry)
+      calculateLivePnL(exactPrice);
+      
+      // Insert the trade into the database if user is logged in
+      const { data: session } = await supabase.auth.getSession();
+      
+      if (session?.session?.user) {
+        const userId = session.session.user.id;
         
-      if (error) {
-        console.error("Error creating trade:", error);
-        toast.error("Error creating trade");
-      } else {
-        toast.success(`${direction.toUpperCase()} trade placed for $${amount}`);
+        trade.user_id = userId;
+        
+        const { error } = await supabase
+          .from('trades')
+          .insert([trade]);
+          
+        if (error) {
+          console.error("Error creating trade:", error);
+          toast.error("Error creating trade");
+        }
       }
-    } else {
-      // Demo mode without login
-      toast.success(`${direction.toUpperCase()} trade placed for $${amount}`);
+    } catch (error) {
+      console.error("Error initiating trade:", error);
+      toast.error("Error initiating trade");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -177,84 +193,105 @@ const ShortTermTrading = ({
     const completeTrade = async () => {
       if (!activeTrade || !entryPrice || countdown > 0) return;
 
-      // Use the current price from props to ensure consistency with the chart
-      const closePrice = currentPrice;
-      
-      // Calculate lot size (how many units were purchased)
-      const lotSize = activeTrade.total / entryPrice;
-      
-      // Determine if the trade was a win or loss based on the direction and price movement
-      const isUp = activeTrade.type === "short_term_up";
-      const priceDiff = closePrice - entryPrice;
-      
-      // Calculate profit/loss based on direction and price movement
-      // For UP trades: profit when price increases
-      // For DOWN trades: profit when price decreases
-      const profit = isUp ? priceDiff * lotSize : -priceDiff * lotSize;
-      
-      // Determine win/loss status
-      const isWin = (isUp && priceDiff > 0) || (!isUp && priceDiff < 0);
-      
-      // Calculate new balance: original balance + initial amount + profit (or loss)
-      const newBalance = userBalance + activeTrade.total + profit;
-
-      // Update the trade
-      const completedTrade: Trade = {
-        ...activeTrade,
-        is_closed: true,
-        close_timestamp: new Date().toISOString(),
-        close_price: closePrice,
-        realized_pnl: profit,
-        close_type: "auto",
-        result: isWin ? "win" : "loss"
-      };
-
-      // Update balance in database
-      const { data: session } = await supabase.auth.getSession();
-      
-      if (session?.session?.user) {
-        const userId = session.session.user.id;
+      try {
+        // Use the current price from props to ensure consistency with the chart
+        const closePrice = currentPrice;
         
+        // Determine if the trade was a win or loss based on the direction and price movement
+        const isUp = activeTrade.type === "short_term_up";
+        const priceDiff = closePrice - entryPrice;
+        
+        // For UP trades: profit when price increases
+        // For DOWN trades: profit when price decreases
+        const isWin = (isUp && priceDiff > 0) || (!isUp && priceDiff < 0);
+        
+        // Calculate profit based on the fixed payout percentage (e.g., 80%)
+        // Full loss if not winning
+        const profit = isWin ? (activeTrade.total * PAYOUT_PERCENTAGE / 100) : -activeTrade.total;
+        
+        // Calculate new balance: original balance + profit (if win)
+        // If loss, profit is negative so this is correct
+        const newBalance = userBalance + (isWin ? activeTrade.total + profit : 0);
+  
         // Update the trade
-        const { error: tradeError } = await supabase
-          .from('trades')
-          .update(completedTrade)
-          .eq('id', completedTrade.id);
+        const completedTrade: Trade = {
+          ...activeTrade,
+          is_closed: true,
+          close_timestamp: new Date().toISOString(),
+          close_price: closePrice,
+          realized_pnl: profit,
+          close_type: "auto",
+          result: isWin ? "win" : "loss"
+        };
+  
+        // Update balance in database
+        const { data: session } = await supabase.auth.getSession();
+        
+        if (session?.session?.user) {
+          const userId = session.session.user.id;
           
-        if (tradeError) {
-          console.error("Error updating trade:", tradeError);
+          // Update the trade
+          const { error: tradeError } = await supabase
+            .from('trades')
+            .update(completedTrade)
+            .eq('id', completedTrade.id);
+            
+          if (tradeError) {
+            console.error("Error updating trade:", tradeError);
+            toast.error("Error updating trade");
+          }
+          
+          // Update user balance
+          const { error: balanceError } = await supabase
+            .from('users')
+            .update({ virtual_balance: newBalance })
+            .eq('id', userId);
+            
+          if (balanceError) {
+            console.error("Error updating balance:", balanceError);
+            toast.error("Error updating balance");
+          }
         }
         
-        // Update user balance
-        const { error: balanceError } = await supabase
-          .from('users')
-          .update({ virtual_balance: newBalance })
-          .eq('id', userId);
-          
-        if (balanceError) {
-          console.error("Error updating balance:", balanceError);
+        // Show result animation
+        setResult(isWin ? "win" : "loss");
+        setShowResult(true);
+        
+        // Show result toast
+        if (isWin) {
+          toast.success(`Trade profit: $${profit.toFixed(2)}`, {
+            description: `${isUp ? 'UP' : 'DOWN'} trade closed at $${closePrice.toFixed(2)}`
+          });
+        } else {
+          toast.error(`Trade loss: $${Math.abs(profit).toFixed(2)}`, {
+            description: `${isUp ? 'UP' : 'DOWN'} trade closed at $${closePrice.toFixed(2)}`
+          });
         }
-      }
-      
-      // Show result animation
-      setResult(isWin ? "win" : "loss");
-      setShowResult(true);
-      
-      // Notify parent component about the completed trade
-      onTradeComplete(completedTrade);
-      onBalanceUpdate(newBalance);
-      
-      // Clear the active trade in parent component for chart visualization
-      onTradeActivation(null);
-      
-      // Hide result after a delay
-      setTimeout(() => {
-        setShowResult(false);
+        
+        // Notify parent component about the completed trade
+        onTradeComplete(completedTrade);
+        onBalanceUpdate(newBalance);
+        
+        // Clear the active trade in parent component for chart visualization
+        onTradeActivation(null);
+        
+        // Hide result after a delay
+        setTimeout(() => {
+          setShowResult(false);
+          setActiveTrade(null);
+          setEntryPrice(null);
+          setLivePnL(0);
+          setLivePnLPercent(0);
+        }, 3000);
+      } catch (error) {
+        console.error("Error completing trade:", error);
+        toast.error("Error completing trade");
+        
+        // Clean up the UI state even in case of error
         setActiveTrade(null);
         setEntryPrice(null);
-        setLivePnL(0);
-        setLivePnLPercent(0);
-      }, 3000);
+        onTradeActivation(null);
+      }
     };
 
     if (countdown === 0 && activeTrade) {
@@ -313,7 +350,7 @@ const ShortTermTrading = ({
             onChange={(e) => setAmount(Number(e.target.value))}
             min={MIN_AMOUNT}
             max={Math.min(MAX_AMOUNT, userBalance)}
-            disabled={!!activeTrade}
+            disabled={!!activeTrade || isProcessing}
             className="font-mono"
           />
           <div className="mt-1 flex justify-between text-xs text-muted-foreground">
@@ -327,7 +364,7 @@ const ShortTermTrading = ({
           <Select 
             value={String(duration)} 
             onValueChange={(value) => setDuration(Number(value))}
-            disabled={!!activeTrade}
+            disabled={!!activeTrade || isProcessing}
           >
             <SelectTrigger>
               <SelectValue placeholder="Select duration" />
@@ -346,7 +383,7 @@ const ShortTermTrading = ({
         <div className="grid grid-cols-2 gap-3 mt-4">
           <Button 
             onClick={() => initiateShortTermTrade("up")}
-            disabled={!!activeTrade || userBalance < amount}
+            disabled={!!activeTrade || userBalance < amount || isProcessing}
             className="bg-green-500 hover:bg-green-600 text-white"
             size="lg"
           >
@@ -355,7 +392,7 @@ const ShortTermTrading = ({
           </Button>
           <Button 
             onClick={() => initiateShortTermTrade("down")}
-            disabled={!!activeTrade || userBalance < amount}
+            disabled={!!activeTrade || userBalance < amount || isProcessing}
             className="bg-destructive hover:bg-destructive/90 text-white"
             size="lg"
           >
@@ -396,6 +433,12 @@ const ShortTermTrading = ({
               {formatCurrency(livePnL)} ({formatPercent(livePnLPercent)})
             </span>
           </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Potential Payout:</span>
+            <span className="font-mono font-medium text-success">
+              Win: ${(activeTrade.total * PAYOUT_PERCENTAGE / 100).toFixed(2)} ({PAYOUT_PERCENTAGE}%)
+            </span>
+          </div>
         </div>
       )}
 
@@ -427,8 +470,9 @@ const ShortTermTrading = ({
       <div className="flex items-start space-x-2 text-xs text-muted-foreground mt-4 pt-4 border-t border-border/40">
         <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
         <p>
-          Predict if the price will go up or down within the selected time period. 
-          Your profit or loss will be calculated based on the price difference between entry and exit multiplied by your lot size.
+          Predict if the price will go up or down within the selected time period.
+          Win {PAYOUT_PERCENTAGE}% profit if your prediction is correct, lose your stake if incorrect.
+          Trades execute at the current market price when placed.
         </p>
       </div>
     </Card>
