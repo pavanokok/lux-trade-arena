@@ -185,71 +185,20 @@ const Login = () => {
             <CardDescription>
               Enter your credentials to access your account
             </CardDescription>
+          </CardHeader>
+          <CardContent>
             <Tabs value={authMode} onValueChange={setAuthMode}>
-              <TabsList className="grid grid-cols-2 w-full">
+              <TabsList className="grid grid-cols-2 w-full mb-4">
                 <TabsTrigger value="password">Password</TabsTrigger>
                 <TabsTrigger value="otp">Email OTP</TabsTrigger>
               </TabsList>
-            </Tabs>
-          </CardHeader>
-          <CardContent>
-            <TabsContent value="password">
-              <form onSubmit={handlePasswordLogin} className="space-y-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="email-password">Email</Label>
-                  <Input
-                    id="email-password"
-                    type="email"
-                    placeholder="name@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    disabled={isLoading}
-                  />
-                </div>
-                
-                <div className="grid gap-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="password">Password</Label>
-                    <Button 
-                      type="button" 
-                      variant="link" 
-                      className="p-0 h-auto" 
-                      onClick={handleResetPassword}
-                      disabled={isLoading}
-                    >
-                      Forgot password?
-                    </Button>
-                  </div>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    disabled={isLoading}
-                  />
-                </div>
-                
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Logging in...
-                    </>
-                  ) : (
-                    "Log In"
-                  )}
-                </Button>
-              </form>
-            </TabsContent>
-            
-            <TabsContent value="otp">
-              {!otpSent ? (
-                <form onSubmit={handleOtpRequest} className="space-y-4">
+
+              <TabsContent value="password">
+                <form onSubmit={handlePasswordLogin} className="space-y-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="email-otp">Email</Label>
+                    <Label htmlFor="email-password">Email</Label>
                     <Input
-                      id="email-otp"
+                      id="email-password"
                       type="email"
                       placeholder="name@example.com"
                       value={email}
@@ -257,53 +206,105 @@ const Login = () => {
                       disabled={isLoading}
                     />
                   </div>
-                  <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Sending OTP...
-                      </>
-                    ) : (
-                      "Send OTP Code"
-                    )}
-                  </Button>
-                </form>
-              ) : (
-                <form onSubmit={handleOtpVerify} className="space-y-4">
+                  
                   <div className="grid gap-2">
-                    <Label htmlFor="otp">Enter OTP Code</Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="password">Password</Label>
+                      <Button 
+                        type="button" 
+                        variant="link" 
+                        className="p-0 h-auto" 
+                        onClick={handleResetPassword}
+                        disabled={isLoading}
+                      >
+                        Forgot password?
+                      </Button>
+                    </div>
                     <Input
-                      id="otp"
-                      type="text"
-                      placeholder="123456"
-                      value={otp}
-                      onChange={(e) => setOtp(e.target.value)}
+                      id="password"
+                      type="password"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
                       disabled={isLoading}
-                      autoComplete="one-time-code"
                     />
                   </div>
+                  
                   <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Verifying...
+                        Logging in...
                       </>
                     ) : (
-                      "Verify OTP"
+                      "Log In"
                     )}
                   </Button>
-                  <Button 
-                    type="button" 
-                    variant="link" 
-                    className="w-full" 
-                    onClick={() => setOtpSent(false)}
-                    disabled={isLoading}
-                  >
-                    Back to Email Entry
-                  </Button>
                 </form>
-              )}
-            </TabsContent>
+              </TabsContent>
+              
+              <TabsContent value="otp">
+                {!otpSent ? (
+                  <form onSubmit={handleOtpRequest} className="space-y-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="email-otp">Email</Label>
+                      <Input
+                        id="email-otp"
+                        type="email"
+                        placeholder="name@example.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        disabled={isLoading}
+                      />
+                    </div>
+                    <Button type="submit" className="w-full" disabled={isLoading}>
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Sending OTP...
+                        </>
+                      ) : (
+                        "Send OTP Code"
+                      )}
+                    </Button>
+                  </form>
+                ) : (
+                  <form onSubmit={handleOtpVerify} className="space-y-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="otp">Enter OTP Code</Label>
+                      <Input
+                        id="otp"
+                        type="text"
+                        placeholder="123456"
+                        value={otp}
+                        onChange={(e) => setOtp(e.target.value)}
+                        disabled={isLoading}
+                        autoComplete="one-time-code"
+                      />
+                    </div>
+                    <Button type="submit" className="w-full" disabled={isLoading}>
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Verifying...
+                        </>
+                      ) : (
+                        "Verify OTP"
+                      )}
+                    </Button>
+                    <Button 
+                      type="button" 
+                      variant="link" 
+                      className="w-full" 
+                      onClick={() => setOtpSent(false)}
+                      disabled={isLoading}
+                    >
+                      Back to Email Entry
+                    </Button>
+                  </form>
+                )}
+              </TabsContent>
+            </Tabs>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
             <div className="text-sm text-center">

@@ -9,6 +9,44 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      automations: {
+        Row: {
+          action: Json
+          active: boolean
+          created_at: string
+          id: string
+          latenode_workflow_id: string | null
+          trigger: Json
+          workspace_id: string
+        }
+        Insert: {
+          action: Json
+          active?: boolean
+          created_at?: string
+          id?: string
+          latenode_workflow_id?: string | null
+          trigger: Json
+          workspace_id: string
+        }
+        Update: {
+          action?: Json
+          active?: boolean
+          created_at?: string
+          id?: string
+          latenode_workflow_id?: string | null
+          trigger?: Json
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automations_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       code_versions: {
         Row: {
           code_content: string
@@ -37,6 +75,70 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "user_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      databases: {
+        Row: {
+          columns: Json
+          created_at: string
+          id: string
+          name: string
+          type: string
+          workspace_id: string
+        }
+        Insert: {
+          columns: Json
+          created_at?: string
+          id?: string
+          name: string
+          type: string
+          workspace_id: string
+        }
+        Update: {
+          columns?: Json
+          created_at?: string
+          id?: string
+          name?: string
+          type?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "databases_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      entries: {
+        Row: {
+          created_at: string
+          data: Json
+          database_id: string
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          data: Json
+          database_id: string
+          id?: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          database_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entries_database_id_fkey"
+            columns: ["database_id"]
+            isOneToOne: false
+            referencedRelation: "databases"
             referencedColumns: ["id"]
           },
         ]
@@ -79,6 +181,41 @@ export type Database = {
           xp_reward?: number
         }
         Relationships: []
+      }
+      logs: {
+        Row: {
+          action: string
+          automation_id: string
+          created_at: string
+          id: string
+          status: string
+          trigger: string
+        }
+        Insert: {
+          action: string
+          automation_id: string
+          created_at?: string
+          id?: string
+          status: string
+          trigger: string
+        }
+        Update: {
+          action?: string
+          automation_id?: string
+          created_at?: string
+          id?: string
+          status?: string
+          trigger?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "logs_automation_id_fkey"
+            columns: ["automation_id"]
+            isOneToOne: false
+            referencedRelation: "automations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       market_data: {
         Row: {
@@ -125,6 +262,54 @@ export type Database = {
         }
         Relationships: []
       }
+      pages: {
+        Row: {
+          content: Json
+          created_at: string
+          id: string
+          last_edited_at: string
+          last_edited_by: string | null
+          parent_id: string | null
+          title: string
+          workspace_id: string
+        }
+        Insert: {
+          content?: Json
+          created_at?: string
+          id?: string
+          last_edited_at?: string
+          last_edited_by?: string | null
+          parent_id?: string | null
+          title: string
+          workspace_id: string
+        }
+        Update: {
+          content?: Json
+          created_at?: string
+          id?: string
+          last_edited_at?: string
+          last_edited_by?: string | null
+          parent_id?: string | null
+          title?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pages_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "pages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pages_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       portfolio: {
         Row: {
           average_price: number
@@ -162,6 +347,45 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      presence: {
+        Row: {
+          id: string
+          last_active: string
+          page_id: string | null
+          user_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          id?: string
+          last_active?: string
+          page_id?: string | null
+          user_id?: string | null
+          workspace_id: string
+        }
+        Update: {
+          id?: string
+          last_active?: string
+          page_id?: string | null
+          user_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "presence_page_id_fkey"
+            columns: ["page_id"]
+            isOneToOne: false
+            referencedRelation: "pages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "presence_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
         ]
@@ -631,6 +855,53 @@ export type Database = {
           title?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      workspace_members: {
+        Row: {
+          role: string
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          role: string
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          role?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_members_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspaces: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          owner_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          owner_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          owner_id?: string | null
         }
         Relationships: []
       }
